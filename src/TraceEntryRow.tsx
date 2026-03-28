@@ -78,7 +78,7 @@ const TraceEntryRow: Component<{
         <span class="trace-time">{timeOnly()}</span>
         <span class={`trace-dir ${dirClass()}`}>{dirArrow()} {dirLabel()}</span>
         <span class={`trace-type-badge ${typeClass()} ${isError() ? 'type-error' : ''}`}>{isError() ? 'ERR' : typeBadge()}</span>
-        <span class="trace-id">{props.entry.requestId !== undefined ? `#${props.entry.requestId}` : ''}</span>
+        <span class="trace-id" title={props.entry.requestId !== undefined ? `#${props.entry.requestId}` : ''}>{props.entry.requestId !== undefined ? `#${props.entry.requestId}` : ''}</span>
         <span class="trace-method">{props.entry.method}</span>
         <Show when={props.isCancelled}>
           <span class="trace-cancelled-badge">CANCELLED</span>

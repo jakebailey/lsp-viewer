@@ -558,7 +558,7 @@ const App: Component = () => {
         </Show>
 
         <Show when={activeTab() === 'timeline'}>
-          <Timeline entries={entries()} pairs={pairs()} cancellations={cancellations()} onScrollTo={scrollToEntry} />
+          <Timeline entries={entries()} pairs={pairs()} cancellations={cancellations()} onScrollTo={(id) => { setActiveTab('trace'); requestAnimationFrame(() => scrollToEntry(id)); }} />
         </Show>
 
         <Show when={activeTab() === 'files'}>
