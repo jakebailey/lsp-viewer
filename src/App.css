@@ -979,6 +979,71 @@
   background: var(--bg-surface);
 }
 
+.timeline-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--code-bg);
+}
+
+.timeline-toolbar-info {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: 8px;
+}
+
+.timeline-toolbar-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: auto;
+  opacity: 0.6;
+}
+
+/* Minimap */
+.timeline-minimap {
+  position: relative;
+  height: 28px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  background: var(--code-bg);
+  user-select: none;
+  touch-action: none;
+}
+
+.timeline-minimap-track {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.timeline-minimap-bar {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  min-width: 1px;
+  border-radius: 1px;
+}
+
+.minimap-bar-ok { background: var(--accent); opacity: 0.5; }
+.minimap-bar-error { background: var(--error-color); opacity: 0.6; }
+.minimap-bar-cancelled { background: var(--not-color); opacity: 0.4; }
+
+.timeline-minimap-viewport {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--accent);
+  opacity: 0.12;
+  border-left: 2px solid var(--accent);
+  border-right: 2px solid var(--accent);
+  border-radius: 2px;
+  pointer-events: none;
+  min-width: 4px;
+}
+
 .timeline-header {
   display: flex;
   align-items: center;
@@ -1009,6 +1074,8 @@
 .timeline-body {
   max-height: 600px;
   overflow-y: auto;
+  overflow-x: hidden;
+  user-select: none;
 }
 
 .timeline-row {
@@ -1063,6 +1130,13 @@
   flex: 1;
   position: relative;
   height: 100%;
+  overflow: hidden;
+  touch-action: none;
+  cursor: grab;
+}
+
+.timeline-track:active {
+  cursor: grabbing;
 }
 
 .timeline-bar {
