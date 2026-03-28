@@ -2,6 +2,8 @@ import { createSignal, createMemo, For, Show, type Component, onMount } from 'so
 import { parseTrace, matchRequestResponse, getSessions, getMethodCategory, LOG_METHODS, type TraceEntry, type Direction, type MessageType } from './parser';
 import TraceEntryRow, { createExpandedSet } from './TraceEntryRow';
 import { readTraceFromHash, writeTraceToHash, clearHash, type HashSizeInfo } from './hashState';
+import { trackFiles } from './fileTracker';
+import FileViewer from './FileViewer';
 import './App.css';
 
 function formatBytes(bytes: number): string {
@@ -69,6 +71,7 @@ const App: Component = () => {
   const [showImport, setShowImport] = createSignal(true);
   const [isLight, setIsLight] = createSignal(false);
   const [hashSize, setHashSize] = createSignal<HashSizeInfo | null>(null);
+  const [activeTab, setActiveTab] = createSignal<'trace' | 'files'>('trace');
 
   function toggleTheme() {
     const next = !isLight();
@@ -97,6 +100,8 @@ const App: Component = () => {
   const pairs = createMemo(() => matchRequestResponse(entries()));
 
   const sessions = createMemo(() => getSessions(entries()));
+
+  const trackedFiles = createMemo(() => trackFiles(entries()));
 
   const methods = createMemo(() => {
     const set = new Set<string>();
@@ -296,126 +301,151 @@ const App: Component = () => {
           <span class="stat stat-req">{stats().requests} requests</span>
           <span class="stat stat-res">{stats().responses} responses</span>
           <span class="stat stat-not">{stats().notifications} notifications</span>
+          <Show when={trackedFiles().size > 0}>
+            <span class="stat">{trackedFiles().size} files</span>
+          </Show>
         </section>
 
-        <section class="filters">
-          <input
-            type="text"
-            class="filter-search"
-            placeholder="Search methods, payloads..."
-            value={searchText()}
-            onInput={(e) => setSearchText(e.currentTarget.value)}
-          />
-          <select
-            class="filter-select"
-            value={filterMethod()}
-            onChange={(e) => setFilterMethod(e.currentTarget.value)}
+        <nav class="tabs">
+          <button
+            class={`tab ${activeTab() === 'trace' ? 'active' : ''}`}
+            onClick={() => setActiveTab('trace')}
           >
-            <option value="">All methods</option>
-            <For each={methodsByCategory()}>
-              {([cat, catMethods]) => (
-                <optgroup label={cat}>
-                  <Show when={catMethods.length > 1}>
-                    <option value={`${cat}/*`}>All {cat}/* ({catMethods.length})</option>
-                  </Show>
-                  <For each={catMethods}>
-                    {(m) => <option value={m}>{m}</option>}
-                  </For>
-                </optgroup>
-              )}
-            </For>
-          </select>
-          <select
-            class="filter-select"
-            value={filterDirection()}
-            onChange={(e) => setFilterDirection(e.currentTarget.value as Direction | '')}
+            Trace
+          </button>
+          <button
+            class={`tab ${activeTab() === 'files' ? 'active' : ''}`}
+            onClick={() => setActiveTab('files')}
+            disabled={trackedFiles().size === 0}
           >
-            <option value="">All directions</option>
-            <option value="sent">Sent</option>
-            <option value="received">Received</option>
-          </select>
-          <select
-            class="filter-select"
-            value={filterType()}
-            onChange={(e) => setFilterType(e.currentTarget.value as MessageType | '')}
-          >
-            <option value="">All types</option>
-            <option value="request">Requests</option>
-            <option value="response">Responses</option>
-            <option value="notification">Notifications</option>
-          </select>
-          <Show when={sessions().length > 1}>
+            Files ({trackedFiles().size})
+          </button>
+        </nav>
+
+        <Show when={activeTab() === 'trace'}>
+          <section class="filters">
+            <input
+              type="text"
+              class="filter-search"
+              placeholder="Search methods, payloads..."
+              value={searchText()}
+              onInput={(e) => setSearchText(e.currentTarget.value)}
+            />
             <select
               class="filter-select"
-              value={filterSession() === '' ? '' : String(filterSession())}
-              onChange={(e) => {
-                const v = e.currentTarget.value;
-                setFilterSession(v === '' ? '' : parseInt(v, 10));
-              }}
+              value={filterMethod()}
+              onChange={(e) => setFilterMethod(e.currentTarget.value)}
             >
-              <option value="">All sessions</option>
-              <For each={sessions()}>
-                {(s) => (
-                  <option value={String(s.index)}>
-                    Session {s.index} ({s.count} msgs)
-                  </option>
+              <option value="">All methods</option>
+              <For each={methodsByCategory()}>
+                {([cat, catMethods]) => (
+                  <optgroup label={cat}>
+                    <Show when={catMethods.length > 1}>
+                      <option value={`${cat}/*`}>All {cat}/* ({catMethods.length})</option>
+                    </Show>
+                    <For each={catMethods}>
+                      {(m) => <option value={m}>{m}</option>}
+                    </For>
+                  </optgroup>
                 )}
               </For>
             </select>
-          </Show>
-          <label class="filter-toggle" title="Hide window/logMessage, $/setTrace, $/logTrace, telemetry/event">
-            <input
-              type="checkbox"
-              checked={hideLogging()}
-              onChange={(e) => setHideLogging(e.currentTarget.checked)}
-            />
-            Hide logging
-          </label>
-          <div class="filter-actions">
-            <button class="btn btn-small" onClick={() => expandAll(filtered().map(e => e.id))}>
-              Expand All
-            </button>
-            <button class="btn btn-small" onClick={collapseAll}>
-              Collapse All
-            </button>
-          </div>
-          <span class="filter-count">{filtered().length} / {entries().length}</span>
-        </section>
+            <select
+              class="filter-select"
+              value={filterDirection()}
+              onChange={(e) => setFilterDirection(e.currentTarget.value as Direction | '')}
+            >
+              <option value="">All directions</option>
+              <option value="sent">Sent</option>
+              <option value="received">Received</option>
+            </select>
+            <select
+              class="filter-select"
+              value={filterType()}
+              onChange={(e) => setFilterType(e.currentTarget.value as MessageType | '')}
+            >
+              <option value="">All types</option>
+              <option value="request">Requests</option>
+              <option value="response">Responses</option>
+              <option value="notification">Notifications</option>
+            </select>
+            <Show when={sessions().length > 1}>
+              <select
+                class="filter-select"
+                value={filterSession() === '' ? '' : String(filterSession())}
+                onChange={(e) => {
+                  const v = e.currentTarget.value;
+                  setFilterSession(v === '' ? '' : parseInt(v, 10));
+                }}
+              >
+                <option value="">All sessions</option>
+                <For each={sessions()}>
+                  {(s) => (
+                    <option value={String(s.index)}>
+                      Session {s.index} ({s.count} msgs)
+                    </option>
+                  )}
+                </For>
+              </select>
+            </Show>
+            <label class="filter-toggle" title="Hide window/logMessage, $/setTrace, $/logTrace, telemetry/event">
+              <input
+                type="checkbox"
+                checked={hideLogging()}
+                onChange={(e) => setHideLogging(e.currentTarget.checked)}
+              />
+              Hide logging
+            </label>
+            <div class="filter-actions">
+              <button class="btn btn-small" onClick={() => expandAll(filtered().map(e => e.id))}>
+                Expand All
+              </button>
+              <button class="btn btn-small" onClick={collapseAll}>
+                Collapse All
+              </button>
+            </div>
+            <span class="filter-count">{filtered().length} / {entries().length}</span>
+          </section>
 
-        <section class="trace-list">
-          <For each={filtered()}>
-            {(entry, i) => {
-              const prevSession = () => {
-                const idx = i();
-                return idx > 0 ? filtered()[idx - 1]?.sessionIndex : undefined;
-              };
-              const showSeparator = () => {
-                const ps = prevSession();
-                return ps !== undefined && ps !== entry.sessionIndex;
-              };
-              return (
-                <>
-                  <Show when={showSeparator()}>
-                    <div class="session-separator">
-                      <span class="session-separator-line" />
-                      <span class="session-separator-label">Session {entry.sessionIndex} — initialize</span>
-                      <span class="session-separator-line" />
+          <section class="trace-list">
+            <For each={filtered()}>
+              {(entry, i) => {
+                const prevSession = () => {
+                  const idx = i();
+                  return idx > 0 ? filtered()[idx - 1]?.sessionIndex : undefined;
+                };
+                const showSeparator = () => {
+                  const ps = prevSession();
+                  return ps !== undefined && ps !== entry.sessionIndex;
+                };
+                return (
+                  <>
+                    <Show when={showSeparator()}>
+                      <div class="session-separator">
+                        <span class="session-separator-line" />
+                        <span class="session-separator-label">Session {entry.sessionIndex} — initialize</span>
+                        <span class="session-separator-line" />
+                      </div>
+                    </Show>
+                    <div ref={(el) => { entryRefs[entry.id] = el; }}>
+                      <TraceEntryRow
+                        entry={entry}
+                        isExpanded={expandedIds().has(entry.id)}
+                        onToggle={() => toggle(entry.id)}
+                        pairedEntry={getPairedEntry(entry)}
+                        onScrollTo={scrollToEntry}
+                      />
                     </div>
-                  </Show>
-                  <div ref={(el) => { entryRefs[entry.id] = el; }}>
-                    <TraceEntryRow
-                      entry={entry}
-                      isExpanded={expandedIds().has(entry.id)}
-                      onToggle={() => toggle(entry.id)}
-                      pairedEntry={getPairedEntry(entry)}
-                      onScrollTo={scrollToEntry}
-                    />
-                  </div>
-                </>
-              );
-            }}
-          </For>
-        </section>
+                  </>
+                );
+              }}
+            </For>
+          </section>
+        </Show>
+
+        <Show when={activeTab() === 'files'}>
+          <FileViewer files={trackedFiles()} isDark={!isLight()} />
+        </Show>
       </Show>
     </div>
   );
