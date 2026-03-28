@@ -1,5 +1,6 @@
 import { type Component, createSignal, createEffect, Show } from 'solid-js';
 import type { TraceEntry } from './parser';
+import { getCancelledRequestId } from './parser';
 import type { TrackedFile } from './fileTracker';
 import { getHighlighter, type Highlighter } from './highlighter';
 import { formatJson } from './formatJson';
@@ -15,6 +16,9 @@ const TraceEntryRow: Component<{
   onScrollTo?: (id: number) => void;
   files?: Map<string, TrackedFile>;
   isDark?: boolean;
+  isCancelled?: boolean;
+  cancelledByEntry?: TraceEntry;
+  cancelTargetEntry?: TraceEntry;
 }> = (props) => {
   const dirClass = () => props.entry.direction === 'sent' ? 'dir-sent' : 'dir-received';
   const typeClass = () => `type-${props.entry.messageType}`;
@@ -67,13 +71,16 @@ const TraceEntryRow: Component<{
   });
 
   return (
-    <div class={`trace-entry ${dirClass()} ${typeClass()} ${props.isExpanded ? 'expanded' : ''}`}>
+    <div class={`trace-entry ${dirClass()} ${typeClass()} ${props.isExpanded ? 'expanded' : ''} ${props.isCancelled ? 'cancelled' : ''}`}>
       <div class="trace-header" onClick={props.onToggle}>
         <span class="trace-time">{timeOnly()}</span>
         <span class={`trace-dir ${dirClass()}`}>{dirArrow()} {dirLabel()}</span>
         <span class={`trace-type-badge ${typeClass()}`}>{typeBadge()}</span>
         <span class="trace-id">{props.entry.requestId !== undefined ? `#${props.entry.requestId}` : ''}</span>
         <span class="trace-method">{props.entry.method}</span>
+        <Show when={props.isCancelled}>
+          <span class="trace-cancelled-badge">CANCELLED</span>
+        </Show>
         <Show when={props.entry.latencyRaw}>
           <span class="trace-latency">{props.entry.latencyRaw}</span>
         </Show>
@@ -87,6 +94,30 @@ const TraceEntryRow: Component<{
             title={`Go to ${props.pairedEntry!.messageType === 'request' ? 'request' : 'response'}`}
           >
             {props.pairedEntry!.messageType === 'request' ? '⬆ req' : '⬇ res'}
+          </button>
+        </Show>
+        <Show when={props.cancelledByEntry}>
+          <button
+            class="trace-pair-link trace-cancel-link"
+            onClick={(e) => {
+              e.stopPropagation();
+              props.onScrollTo?.(props.cancelledByEntry!.id);
+            }}
+            title="Go to $/cancelRequest"
+          >
+            ✕ cancel
+          </button>
+        </Show>
+        <Show when={props.cancelTargetEntry}>
+          <button
+            class="trace-pair-link trace-cancel-link"
+            onClick={(e) => {
+              e.stopPropagation();
+              props.onScrollTo?.(props.cancelTargetEntry!.id);
+            }}
+            title={`Go to cancelled request: ${props.cancelTargetEntry!.method}`}
+          >
+            ✕ #{getCancelledRequestId(props.entry)} {props.cancelTargetEntry!.method}
           </button>
         </Show>
         <span class="trace-expand-icon">{props.isExpanded ? '▼' : '▶'}</span>

@@ -1,5 +1,5 @@
 import { createSignal, createMemo, For, Show, type Component, onMount } from 'solid-js';
-import { parseTrace, matchRequestResponse, getSessions, getMethodCategory, LOG_METHODS, type TraceEntry, type Direction, type MessageType } from './parser';
+import { parseTrace, matchRequestResponse, getSessions, getMethodCategory, getCancellations, getCancelledRequestId, LOG_METHODS, type TraceEntry, type Direction, type MessageType } from './parser';
 import TraceEntryRow, { createExpandedSet } from './TraceEntryRow';
 import { readTraceFromHash, writeTraceToHash, clearHash, type HashSizeInfo } from './hashState';
 import { trackFiles } from './fileTracker';
@@ -102,6 +102,23 @@ const App: Component = () => {
   const sessions = createMemo(() => getSessions(entries()));
 
   const trackedFiles = createMemo(() => trackFiles(entries()));
+
+  const cancellations = createMemo(() => getCancellations(entries()));
+
+  // Build a map from request ID to the request entry, for $/cancelRequest linking
+  const requestById = createMemo(() => {
+    const map = new Map<string, TraceEntry>();
+    for (const entry of entries()) {
+      if (entry.requestId !== undefined && entry.messageType === 'request' && entry.direction === 'sent') {
+        map.set(entry.requestId, entry);
+      }
+      // Also index received requests
+      if (entry.requestId !== undefined && entry.messageType === 'request' && entry.direction === 'received') {
+        if (!map.has(entry.requestId)) map.set(entry.requestId, entry);
+      }
+    }
+    return map;
+  });
 
   const methods = createMemo(() => {
     const set = new Set<string>();
@@ -440,6 +457,12 @@ const App: Component = () => {
                         onScrollTo={scrollToEntry}
                         files={trackedFiles()}
                         isDark={!isLight()}
+                        isCancelled={entry.requestId !== undefined && cancellations().has(entry.requestId)}
+                        cancelledByEntry={entry.requestId !== undefined ? cancellations().get(entry.requestId) : undefined}
+                        cancelTargetEntry={entry.method === '$/cancelRequest' ? (() => {
+                          const rid = getCancelledRequestId(entry);
+                          return rid ? requestById().get(rid) : undefined;
+                        })() : undefined}
                       />
                     </div>
                   </>

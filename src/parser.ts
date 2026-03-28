@@ -165,6 +165,27 @@ export function matchRequestResponse(entries: TraceEntry[]): Map<string, { reque
   return pairs;
 }
 
+/** Build a map from cancelled request ID to the $/cancelRequest entry that cancelled it */
+export function getCancellations(entries: TraceEntry[]): Map<string, TraceEntry> {
+  const cancellations = new Map<string, TraceEntry>();
+  for (const entry of entries) {
+    if (entry.method === '$/cancelRequest' && entry.body && typeof entry.body === 'object') {
+      const id = (entry.body as { id?: string | number }).id;
+      if (id !== undefined) {
+        cancellations.set(String(id), entry);
+      }
+    }
+  }
+  return cancellations;
+}
+
+/** For a $/cancelRequest entry, get the request ID it's cancelling */
+export function getCancelledRequestId(entry: TraceEntry): string | undefined {
+  if (entry.method !== '$/cancelRequest' || !entry.body || typeof entry.body !== 'object') return undefined;
+  const id = (entry.body as { id?: string | number }).id;
+  return id !== undefined ? String(id) : undefined;
+}
+
 // Methods that are logging/trace infrastructure, not real LSP traffic
 export const LOG_METHODS = new Set([
   'window/logMessage',

@@ -541,6 +541,36 @@
   border-left: 3px solid var(--received-color);
 }
 
+/* Cancelled requests */
+.trace-entry.cancelled {
+  opacity: 0.6;
+}
+
+.trace-entry.cancelled .trace-method {
+  text-decoration: line-through;
+  text-decoration-color: var(--error-color);
+}
+
+.trace-cancelled-badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(220, 38, 38, 0.15);
+  color: var(--error-color);
+  flex-shrink: 0;
+}
+
+.trace-cancel-link {
+  color: var(--error-color) !important;
+  border-color: rgba(220, 38, 38, 0.3) !important;
+}
+
+.trace-cancel-link:hover {
+  background: rgba(220, 38, 38, 0.1) !important;
+}
+
 /* URL size indicator */
 .url-size-indicator {
   position: relative;
