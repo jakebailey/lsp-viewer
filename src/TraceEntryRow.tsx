@@ -2,6 +2,7 @@ import { type Component, createSignal, createEffect, Show } from 'solid-js';
 import type { TraceEntry } from './parser';
 import type { TrackedFile } from './fileTracker';
 import { getHighlighter, type Highlighter } from './highlighter';
+import { formatJson } from './formatJson';
 import TraceFileContent from './TraceFileContent';
 
 const FILE_METHODS = new Set(['textDocument/didOpen', 'textDocument/didChange', 'textDocument/didClose']);
@@ -37,7 +38,7 @@ const TraceEntryRow: Component<{
   const formatBody = () => {
     if (!props.entry.body) return '';
     if (typeof props.entry.body === 'string') return props.entry.body;
-    return JSON.stringify(props.entry.body, null, 2);
+    return formatJson(props.entry.body);
   };
 
   const [highlightedBody, setHighlightedBody] = createSignal('');
