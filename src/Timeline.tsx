@@ -1,5 +1,6 @@
-import { type Component, createMemo, createSignal, For, Show } from 'solid-js';
+import { type Component, createMemo, createSignal, createEffect, on, For, Show } from 'solid-js';
 import type { TraceEntry } from './parser';
+import type { SessionInfo } from './parser';
 
 interface TimelineItem {
   requestId: string;
@@ -11,17 +12,23 @@ interface TimelineItem {
   durationMs: number;
   isCancelled: boolean;
   isError: boolean;
+  sessionIndex: number;
 }
 
 const Timeline: Component<{
   entries: TraceEntry[];
   pairs: Map<string, { request?: TraceEntry; response?: TraceEntry }>;
   cancellations: Map<string, TraceEntry>;
+  sessions: SessionInfo[];
   onScrollTo: (id: number) => void;
 }> = (props) => {
   // View window: [viewStart, viewEnd] in ms (relative to trace start)
   const [viewStart, setViewStart] = createSignal(0);
   const [viewEnd, setViewEnd] = createSignal(1000);
+  const [filterSession, setFilterSession] = createSignal<number | ''>('');
+  const [collapseGaps, setCollapseGaps] = createSignal(false);
+  const [hideCancelled, setHideCancelled] = createSignal(false);
+  const [gapThresholdMs] = createSignal(2000); // gaps > 2s get collapsed
   const [isDragging, setIsDragging] = createSignal(false);
   const [dragStartX, setDragStartX] = createSignal(0);
   const [dragStartView, setDragStartView] = createSignal<[number, number]>([0, 0]);
@@ -31,7 +38,7 @@ const Timeline: Component<{
   let trackAreaRef: HTMLDivElement | undefined;
   let minimapRef: HTMLDivElement | undefined;
 
-  const timelineItems = createMemo(() => {
+  const allTimelineItems = createMemo(() => {
     const items: TimelineItem[] = [];
     const base = props.entries.length > 0 ? parseTimestamp(props.entries[0].timestamp) : 0;
 
@@ -50,12 +57,108 @@ const Timeline: Component<{
         durationMs,
         isCancelled: props.cancellations.has(reqId),
         isError: pair.response?.bodyLabel === 'Error',
+        sessionIndex: pair.request.sessionIndex,
       });
     }
 
     items.sort((a, b) => a.startMs - b.startMs);
     return items;
   });
+
+  // Filter by session and rebase timestamps
+  const sessionFiltered = createMemo(() => {
+    const session = filterSession();
+    const all = allTimelineItems();
+    if (session === '') return all;
+
+    const sessionItems = all.filter(i => i.sessionIndex === session);
+    if (sessionItems.length === 0) return sessionItems;
+
+    // Rebase to session start
+    const base = sessionItems[0].startMs;
+    return sessionItems.map(i => ({ ...i, startMs: i.startMs - base, endMs: i.endMs - base }));
+  });
+
+  // Detect gaps between activity regions
+  const gaps = createMemo(() => {
+    const items = sessionFiltered();
+    const threshold = gapThresholdMs();
+    if (items.length < 2) return [];
+
+    // Build a timeline of "active" spans, then find gaps between them
+    const spans: Array<{ start: number; end: number }> = [];
+    for (const item of items) {
+      if (spans.length > 0 && item.startMs <= spans[spans.length - 1].end + threshold) {
+        spans[spans.length - 1].end = Math.max(spans[spans.length - 1].end, item.endMs);
+      } else {
+        spans.push({ start: item.startMs, end: item.endMs });
+      }
+    }
+
+    const result: Array<{ start: number; end: number; duration: number }> = [];
+    for (let i = 1; i < spans.length; i++) {
+      const gapStart = spans[i - 1].end;
+      const gapEnd = spans[i].start;
+      const duration = gapEnd - gapStart;
+      if (duration > threshold) {
+        result.push({ start: gapStart, end: gapEnd, duration });
+      }
+    }
+    return result;
+  });
+
+  const totalGapReduction = createMemo(() => {
+    if (!collapseGaps()) return 0;
+    const COLLAPSED_GAP = 200; // show collapsed gaps as 200ms
+    return gaps().reduce((sum, g) => sum + (g.duration - COLLAPSED_GAP), 0);
+  });
+
+  // Remap a timestamp if gap collapsing is on
+  function remapTime(ms: number): number {
+    if (!collapseGaps()) return ms;
+    const COLLAPSED_GAP = 200;
+    let offset = 0;
+    for (const gap of gaps()) {
+      if (ms <= gap.start) break;
+      if (ms >= gap.end) {
+        offset += gap.duration - COLLAPSED_GAP;
+      } else {
+        // Inside a gap — clamp to gap start + small offset
+        offset += (ms - gap.start) - Math.min(ms - gap.start, COLLAPSED_GAP);
+      }
+    }
+    return ms - offset;
+  }
+
+  const timelineItems = createMemo(() => {
+    let items = sessionFiltered();
+    if (hideCancelled()) items = items.filter(i => !i.isCancelled);
+    if (!collapseGaps() || gaps().length === 0) return items;
+    return items.map(i => ({
+      ...i,
+      startMs: remapTime(i.startMs),
+      endMs: remapTime(i.endMs),
+    }));
+  });
+
+  // Collapsed gap markers for display (remapped positions)
+  const gapMarkers = createMemo(() => {
+    if (!collapseGaps()) return [];
+    const COLLAPSED_GAP = 200;
+    return gaps().map(g => ({
+      position: remapTime(g.start),
+      width: COLLAPSED_GAP,
+      originalDuration: g.duration,
+    }));
+  });
+
+  // Reset view when session filter or collapse changes
+  createEffect(on(() => [filterSession(), collapseGaps()] as const, () => {
+    const items = timelineItems();
+    const max = items.length > 0 ? Math.max(...items.map(i => i.endMs), 1000) : 1000;
+    setViewStart(0);
+    setViewEnd(max);
+  }));
 
   const totalDuration = createMemo(() => {
     const items = timelineItems();
@@ -78,13 +181,6 @@ const Timeline: Component<{
   });
 
   const viewDuration = () => viewEnd() - viewStart();
-
-  // Visible items (with padding)
-  const visibleItems = createMemo(() => {
-    const vs = viewStart();
-    const ve = viewEnd();
-    return timelineItems().filter(i => i.endMs >= vs && i.startMs <= ve);
-  });
 
   const formatMs = (ms: number) => {
     if (ms < 0) ms = 0;
@@ -230,6 +326,40 @@ const Timeline: Component<{
         <button class="btn btn-small" onClick={zoomIn} title="Zoom in">+</button>
         <button class="btn btn-small" onClick={zoomOut} title="Zoom out">−</button>
         <button class="btn btn-small" onClick={zoomToFit} title="Fit all">Fit</button>
+        <Show when={props.sessions.length > 1}>
+          <select
+            class="filter-select timeline-session-select"
+            value={filterSession() === '' ? '' : String(filterSession())}
+            onChange={(e) => {
+              const v = e.currentTarget.value;
+              setFilterSession(v === '' ? '' : parseInt(v, 10));
+            }}
+          >
+            <option value="">All sessions</option>
+            <For each={props.sessions}>
+              {(s) => <option value={String(s.index)}>Session {s.index} ({s.count} msgs)</option>}
+            </For>
+          </select>
+        </Show>
+        <label class="filter-toggle timeline-gap-toggle" title="Collapse idle gaps longer than 2s">
+          <input
+            type="checkbox"
+            checked={collapseGaps()}
+            onChange={(e) => setCollapseGaps(e.currentTarget.checked)}
+          />
+          Hide gaps
+          <Show when={collapseGaps() && gaps().length > 0}>
+            <span class="timeline-gap-count">({gaps().length})</span>
+          </Show>
+        </label>
+        <label class="filter-toggle" title="Hide cancelled requests">
+          <input
+            type="checkbox"
+            checked={hideCancelled()}
+            onChange={(e) => setHideCancelled(e.currentTarget.checked)}
+          />
+          Hide cancelled
+        </label>
         <span class="timeline-toolbar-info">
           {formatMs(viewStart())} — {formatMs(viewEnd())} ({formatMs(viewDuration())})
         </span>
@@ -254,6 +384,20 @@ const Timeline: Component<{
               return <div class={`timeline-minimap-bar ${cls}`} style={`left:${left}%;width:${width}%`} />;
             }}
           </For>
+          <For each={gapMarkers()}>
+            {(marker) => {
+              const total = totalDuration();
+              const left = (marker.position / total) * 100;
+              const width = Math.max((marker.width / total) * 100, 0.3);
+              return (
+                <div
+                  class="timeline-minimap-gap"
+                  style={`left:${left}%;width:${width}%`}
+                  title={`Gap: ${formatMs(marker.originalDuration)} collapsed`}
+                />
+              );
+            }}
+          </For>
         </div>
         <div
           class="timeline-minimap-viewport"
@@ -274,7 +418,7 @@ const Timeline: Component<{
         ref={trackAreaRef}
         onWheel={handleWheel}
       >
-        <For each={visibleItems()}>
+        <For each={timelineItems()}>
           {(item) => {
             const vs = viewStart;
             const dur = viewDuration;
@@ -302,6 +446,19 @@ const Timeline: Component<{
                   on:pointermove={handleTrackPointerMove}
                   on:pointerup={handleTrackPointerUp}
                 >
+                  <For each={gapMarkers()}>
+                    {(marker) => {
+                      const gLeft = () => ((marker.position - vs()) / dur()) * 100;
+                      const gWidth = () => Math.max((marker.width / dur()) * 100, 0.2);
+                      return (
+                        <div
+                          class="timeline-gap-marker"
+                          style={`left:${gLeft()}%;width:${gWidth()}%`}
+                          title={`Gap: ${formatMs(marker.originalDuration)} collapsed`}
+                        />
+                      );
+                    }}
+                  </For>
                   <div
                     class={`timeline-bar ${barClass()}`}
                     style={`left:${left()}%;width:${width()}%`}

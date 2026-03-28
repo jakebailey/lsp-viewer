@@ -17,6 +17,7 @@ const App: Component = () => {
   const [filterType, setFilterType] = createSignal<MessageType | ''>('');
   const [searchText, setSearchText] = createSignal('');
   const [hideLogging, setHideLogging] = createSignal(true);
+  const [hideCancelled, setHideCancelled] = createSignal(false);
   const [filterSession, setFilterSession] = createSignal<number | ''>('');
   const [showImport, setShowImport] = createSignal(true);
   const [isLight, setIsLight] = createSignal(false);
@@ -118,8 +119,20 @@ const App: Component = () => {
     const search = searchText().toLowerCase();
     const session = filterSession();
     const noise = hideLogging();
+    const cancelled = hideCancelled();
 
     if (noise) result = result.filter(e => !LOG_METHODS.has(e.method));
+    if (cancelled) {
+      const cancelledKeys = new Set(cancellations().keys());
+      result = result.filter(e => {
+        // Hide $/cancelRequest notifications themselves
+        if (e.method === '$/cancelRequest') return false;
+        // Hide requests/responses that were cancelled
+        const key = sessionKey(e);
+        if (key !== undefined && cancelledKeys.has(key)) return false;
+        return true;
+      });
+    }
     if (session !== '') result = result.filter(e => e.sessionIndex === session);
     if (method) {
       // Support filtering by category prefix (e.g. "textDocument/*")
@@ -175,6 +188,7 @@ const App: Component = () => {
     setSearchText('');
     setFilterSession('');
     setHideLogging(true);
+    setHideCancelled(false);
     collapseAll();
     clearTraceHash();
     setTraceId(null);
@@ -562,6 +576,14 @@ const App: Component = () => {
               />
               Hide logging
             </label>
+            <label class="filter-toggle" title="Hide cancelled requests and $/cancelRequest notifications">
+              <input
+                type="checkbox"
+                checked={hideCancelled()}
+                onChange={(e) => setHideCancelled(e.currentTarget.checked)}
+              />
+              Hide cancelled
+            </label>
             <div class="filter-actions">
               <button class="btn btn-small" onClick={() => expandAll(filtered().map(e => e.id))}>
                 Expand All
@@ -619,7 +641,7 @@ const App: Component = () => {
         </Show>
 
         <Show when={activeTab() === 'timeline'}>
-          <Timeline entries={entries()} pairs={pairs()} cancellations={cancellations()} onScrollTo={(id) => { setActiveTab('trace'); requestAnimationFrame(() => scrollToEntry(id)); }} />
+          <Timeline entries={entries()} pairs={pairs()} cancellations={cancellations()} sessions={sessions()} onScrollTo={(id) => { setActiveTab('trace'); requestAnimationFrame(() => scrollToEntry(id)); }} />
         </Show>
 
         <Show when={activeTab() === 'analytics'}>
