@@ -3,8 +3,10 @@ import { parseTrace, matchRequestResponse, getSessions, getMethodCategory, getCa
 import TraceEntryRow, { createExpandedSet } from './TraceEntryRow';
 import { readTraceFromHash, writeTraceToHash, clearHash, type HashSizeInfo } from './hashState';
 import { trackFiles } from './fileTracker';
+import { formatJson } from './formatJson';
 import FileViewer from './FileViewer';
 import Timeline from './Timeline';
+import Analytics from './Analytics';
 import './App.css';
 
 function formatBytes(bytes: number): string {
@@ -72,20 +74,31 @@ const App: Component = () => {
   const [showImport, setShowImport] = createSignal(true);
   const [isLight, setIsLight] = createSignal(false);
   const [hashSize, setHashSize] = createSignal<HashSizeInfo | null>(null);
-  const [activeTab, setActiveTab] = createSignal<'trace' | 'files' | 'timeline'>('trace');
+  const [activeTab, setActiveTab] = createSignal<'trace' | 'files' | 'timeline' | 'analytics'>('trace');
   const [focusedIndex, setFocusedIndex] = createSignal(-1);
   const [copied, setCopied] = createSignal(false);
+  const [showHelp, setShowHelp] = createSignal(false);
 
   function toggleTheme() {
     const next = !isLight();
     setIsLight(next);
     document.documentElement.classList.toggle('light', next);
+    try { localStorage.setItem('lsp-viewer-theme', next ? 'light' : 'dark'); } catch {}
   }
 
   const { expandedIds, toggle, expandAll, collapseAll } = createExpandedSet();
 
   // Restore from URL hash on mount
   onMount(() => {
+    // Restore theme preference
+    try {
+      const savedTheme = localStorage.getItem('lsp-viewer-theme');
+      if (savedTheme === 'light') {
+        setIsLight(true);
+        document.documentElement.classList.add('light');
+      }
+    } catch {}
+
     const saved = readTraceFromHash();
     if (saved) {
       setRawText(saved);
@@ -239,10 +252,43 @@ const App: Component = () => {
     });
   }
 
+  function exportFiltered() {
+    const data = filtered().map(e => ({
+      timestamp: e.timestamp,
+      direction: e.direction,
+      messageType: e.messageType,
+      method: e.method,
+      requestId: e.requestId,
+      latencyMs: e.latencyMs,
+      bodyLabel: e.bodyLabel,
+      body: e.body,
+      sessionIndex: e.sessionIndex,
+    }));
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `lsp-trace-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   // Keyboard navigation
   let searchInputRef: HTMLInputElement | undefined;
 
   function handleKeyDown(e: KeyboardEvent) {
+    // Help modal toggle
+    if (e.key === '?' && !(e.target as HTMLElement).matches('input, textarea, select')) {
+      e.preventDefault();
+      setShowHelp(v => !v);
+      return;
+    }
+    if (e.key === 'Escape' && showHelp()) {
+      setShowHelp(false);
+      return;
+    }
+
     if (showImport() || activeTab() !== 'trace') return;
     const target = e.target as HTMLElement;
     const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT';
@@ -353,9 +399,11 @@ const App: Component = () => {
             )}
           </Show>
           <Show when={!showImport()}>
+            <button class="btn btn-secondary" onClick={exportFiltered} title="Export filtered results as JSON">Export</button>
             <button class="btn btn-secondary" onClick={() => { setShowImport(true); clearHash(); setHashSize(null); }}>Import New</button>
             <button class="btn btn-secondary" onClick={handleClear}>Clear</button>
           </Show>
+          <button class="btn btn-secondary btn-help" onClick={() => setShowHelp(v => !v)} title="Keyboard shortcuts (?)">?</button>
           <button class="btn btn-secondary theme-toggle" onClick={toggleTheme} title={isLight() ? 'Switch to dark mode' : 'Switch to light mode'}>
             {isLight() ? '🌙' : '☀️'}
           </button>
@@ -423,6 +471,12 @@ const App: Component = () => {
             onClick={() => setActiveTab('timeline')}
           >
             Timeline
+          </button>
+          <button
+            class={`tab ${activeTab() === 'analytics' ? 'active' : ''}`}
+            onClick={() => setActiveTab('analytics')}
+          >
+            Analytics
           </button>
         </nav>
 
@@ -561,9 +615,34 @@ const App: Component = () => {
           <Timeline entries={entries()} pairs={pairs()} cancellations={cancellations()} onScrollTo={(id) => { setActiveTab('trace'); requestAnimationFrame(() => scrollToEntry(id)); }} />
         </Show>
 
+        <Show when={activeTab() === 'analytics'}>
+          <Analytics entries={entries()} pairs={pairs()} cancellations={cancellations()} onScrollTo={(id) => { setActiveTab('trace'); requestAnimationFrame(() => scrollToEntry(id)); }} />
+        </Show>
+
         <Show when={activeTab() === 'files'}>
           <FileViewer files={trackedFiles()} isDark={!isLight()} />
         </Show>
+      </Show>
+
+      <Show when={showHelp()}>
+        <div class="help-overlay" onClick={() => setShowHelp(false)}>
+          <div class="help-modal" onClick={(e) => e.stopPropagation()}>
+            <div class="help-header">
+              <h2>Keyboard Shortcuts</h2>
+              <button class="help-close" onClick={() => setShowHelp(false)}>✕</button>
+            </div>
+            <table class="help-table">
+              <tbody>
+                <tr><td class="help-key"><kbd>?</kbd></td><td>Show/hide this help</td></tr>
+                <tr><td class="help-key"><kbd>/</kbd></td><td>Focus search box</td></tr>
+                <tr><td class="help-key"><kbd>j</kbd> / <kbd>↓</kbd></td><td>Next entry</td></tr>
+                <tr><td class="help-key"><kbd>k</kbd> / <kbd>↑</kbd></td><td>Previous entry</td></tr>
+                <tr><td class="help-key"><kbd>Enter</kbd> / <kbd>Space</kbd></td><td>Expand/collapse focused entry</td></tr>
+                <tr><td class="help-key"><kbd>Esc</kbd></td><td>Unfocus search / close help</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </Show>
     </div>
   );

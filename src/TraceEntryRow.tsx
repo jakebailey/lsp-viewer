@@ -6,6 +6,22 @@ import { getHighlighter, type Highlighter } from './highlighter';
 import { formatJson } from './formatJson';
 import TraceFileContent from './TraceFileContent';
 
+function CopyButton(props: { text: string }) {
+  const [copied, setCopied] = createSignal(false);
+  function handleCopy(e: MouseEvent) {
+    e.stopPropagation();
+    navigator.clipboard.writeText(props.text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }
+  return (
+    <button class="trace-copy-btn" onClick={handleCopy} title="Copy JSON body">
+      {copied() ? '✓ Copied' : '📋 Copy'}
+    </button>
+  );
+}
+
 const FILE_METHODS = new Set(['textDocument/didOpen', 'textDocument/didChange', 'textDocument/didClose']);
 
 const TraceEntryRow: Component<{
@@ -132,7 +148,12 @@ const TraceEntryRow: Component<{
       </div>
       <Show when={props.isExpanded}>
         <div class="trace-body">
-          <div class="trace-body-label">{props.entry.bodyLabel}:</div>
+          <div class="trace-body-header">
+            <div class="trace-body-label">{props.entry.bodyLabel}:</div>
+            <Show when={formatBody()}>
+              <CopyButton text={formatBody()} />
+            </Show>
+          </div>
           <Show when={props.entry.body !== undefined} fallback={<div class="trace-body-empty">No content</div>}>
             <Show when={highlightedBody()} fallback={
               <pre class="trace-body-content"><code>{formatBody()}</code></pre>
