@@ -3,7 +3,6 @@ import { parseTrace, matchRequestResponse, getSessions, getMethodCategory, getCa
 import TraceEntryRow, { createExpandedSet } from './TraceEntryRow';
 import { saveTrace, loadTrace, listTraces, deleteTrace, getTraceIdFromHash, clearTraceHash, formatAge, type StoredTrace } from './traceStore';
 import { trackFiles } from './fileTracker';
-import { formatJson } from './formatJson';
 import FileViewer from './FileViewer';
 import Timeline from './Timeline';
 import Analytics from './Analytics';
@@ -23,7 +22,6 @@ const App: Component = () => {
   const [isLight, setIsLight] = createSignal(false);
   const [activeTab, setActiveTab] = createSignal<'trace' | 'files' | 'timeline' | 'analytics'>('trace');
   const [focusedIndex, setFocusedIndex] = createSignal(-1);
-  const [copied, setCopied] = createSignal(false);
   const [showHelp, setShowHelp] = createSignal(false);
   const [traceId, setTraceId] = createSignal<string | null>(null);
   const [savedTraces, setSavedTraces] = createSignal<StoredTrace[]>([]);
@@ -216,13 +214,6 @@ const App: Component = () => {
     const pair = pairs().get(key);
     if (!pair?.response?.latencyRaw) return undefined;
     return pair.response.latencyRaw;
-  }
-
-  function copyUrl() {
-    navigator.clipboard.writeText(location.href).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
   }
 
   function exportFiltered() {

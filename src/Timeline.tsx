@@ -107,12 +107,6 @@ const Timeline: Component<{
     return result;
   });
 
-  const totalGapReduction = createMemo(() => {
-    if (!collapseGaps()) return 0;
-    const COLLAPSED_GAP = 200; // show collapsed gaps as 200ms
-    return gaps().reduce((sum, g) => sum + (g.duration - COLLAPSED_GAP), 0);
-  });
-
   // Remap a timestamp if gap collapsing is on
   function remapTime(ms: number): number {
     if (!collapseGaps()) return ms;
@@ -236,7 +230,6 @@ const Timeline: Component<{
 
   function pan(deltaMs: number) {
     const total = totalDuration();
-    const dur = viewDuration();
     let newStart = viewStart() + deltaMs;
     let newEnd = viewEnd() + deltaMs;
     if (newStart < 0) { newEnd -= newStart; newStart = 0; }
