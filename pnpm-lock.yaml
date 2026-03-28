@@ -8,10 +8,16 @@ importers:
 
   .:
     dependencies:
+      lz-string:
+        specifier: ^1.5.0
+        version: 1.5.0
       solid-js:
         specifier: ^1.9.11
         version: 1.9.12
     devDependencies:
+      '@types/lz-string':
+        specifier: ^1.5.0
+        version: 1.5.0
       '@types/node':
         specifier: ^24.12.0
         version: 24.12.0
@@ -252,6 +258,10 @@ packages:
   '@types/babel__traverse@7.28.0':
     resolution: {integrity: sha512-8PvcXf70gTDZBgt9ptxJ8elBeBjcLOAcOtoO/mPJjtji1+CdGbHgm77om1GrsPxsiE+uXIpNSK64UYaIwQXd4Q==}
 
+  '@types/lz-string@1.5.0':
+    resolution: {integrity: sha512-s84fKOrzqqNCAPljhVyC5TjAo6BH4jKHw9NRNFNiRUY5QSgZCmVm5XILlWbisiKl+0OcS7eWihmKGS5akc2iQw==}
+    deprecated: This is a stub types definition. lz-string provides its own type definitions, so you do not need this installed.
+
   '@types/node@24.12.0':
     resolution: {integrity: sha512-GYDxsZi3ChgmckRT9HPU0WEhKLP08ev/Yfcq2AstjrDASOYCSXeyjDsHg4v5t4jOj7cyDX3vmprafKlWIG9MXQ==}
 
@@ -426,6 +436,10 @@ packages:
 
   lru-cache@5.1.1:
     resolution: {integrity: sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w==}
+
+  lz-string@1.5.0:
+    resolution: {integrity: sha512-h5bgJWpxJNswbU7qCrV0tIKQCaS3blPDrqKWx+QxzuzL1zGUzij9XCWLrSLsJPu5t+eWA/ycetzYAO5IOMcWAQ==}
+    hasBin: true
 
   merge-anything@5.1.7:
     resolution: {integrity: sha512-eRtbOb1N5iyH0tkQDAoQ4Ipsp/5qSR79Dzrz8hEPxRX10RWWR/iQXdoKmBSRCThY1Fh5EhISDtpSc93fpxUniQ==}
@@ -804,6 +818,10 @@ snapshots:
     dependencies:
       '@babel/types': 7.29.0
 
+  '@types/lz-string@1.5.0':
+    dependencies:
+      lz-string: 1.5.0
+
   '@types/node@24.12.0':
     dependencies:
       undici-types: 7.16.0
@@ -923,6 +941,8 @@ snapshots:
   lru-cache@5.1.1:
     dependencies:
       yallist: 3.1.1
+
+  lz-string@1.5.0: {}
 
   merge-anything@5.1.7:
     dependencies:
