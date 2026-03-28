@@ -1,9 +1,10 @@
-import { createSignal, createMemo, For, Show, type Component, onMount } from 'solid-js';
-import { parseTrace, matchRequestResponse, getSessions, getMethodCategory, getCancellations, getCancelledRequestId, LOG_METHODS, type TraceEntry, type Direction, type MessageType } from './parser';
+import { createSignal, createMemo, For, Show, type Component, onMount, onCleanup } from 'solid-js';
+import { parseTrace, matchRequestResponse, getSessions, getMethodCategory, getCancellations, getCancelledRequestId, sessionKey, LOG_METHODS, type TraceEntry, type Direction, type MessageType } from './parser';
 import TraceEntryRow, { createExpandedSet } from './TraceEntryRow';
 import { readTraceFromHash, writeTraceToHash, clearHash, type HashSizeInfo } from './hashState';
 import { trackFiles } from './fileTracker';
 import FileViewer from './FileViewer';
+import Timeline from './Timeline';
 import './App.css';
 
 function formatBytes(bytes: number): string {
@@ -71,7 +72,9 @@ const App: Component = () => {
   const [showImport, setShowImport] = createSignal(true);
   const [isLight, setIsLight] = createSignal(false);
   const [hashSize, setHashSize] = createSignal<HashSizeInfo | null>(null);
-  const [activeTab, setActiveTab] = createSignal<'trace' | 'files'>('trace');
+  const [activeTab, setActiveTab] = createSignal<'trace' | 'files' | 'timeline'>('trace');
+  const [focusedIndex, setFocusedIndex] = createSignal(-1);
+  const [copied, setCopied] = createSignal(false);
 
   function toggleTheme() {
     const next = !isLight();
@@ -105,16 +108,16 @@ const App: Component = () => {
 
   const cancellations = createMemo(() => getCancellations(entries()));
 
-  // Build a map from request ID to the request entry, for $/cancelRequest linking
+  // Build a map from session:requestId to the request entry, for $/cancelRequest linking
   const requestById = createMemo(() => {
     const map = new Map<string, TraceEntry>();
     for (const entry of entries()) {
-      if (entry.requestId !== undefined && entry.messageType === 'request' && entry.direction === 'sent') {
-        map.set(entry.requestId, entry);
-      }
-      // Also index received requests
-      if (entry.requestId !== undefined && entry.messageType === 'request' && entry.direction === 'received') {
-        if (!map.has(entry.requestId)) map.set(entry.requestId, entry);
+      const key = sessionKey(entry);
+      if (key === undefined || entry.messageType !== 'request') continue;
+      if (entry.direction === 'sent') {
+        map.set(key, entry);
+      } else if (!map.has(key)) {
+        map.set(key, entry);
       }
     }
     return map;
@@ -216,11 +219,76 @@ const App: Component = () => {
       el.classList.add('highlight-flash');
       setTimeout(() => el.classList.remove('highlight-flash'), 1500);
     }
+    // Update focused index
+    const idx = filtered().findIndex(e => e.id === id);
+    if (idx >= 0) setFocusedIndex(idx);
   }
 
+  function getRequestLatency(entry: TraceEntry): string | undefined {
+    const key = sessionKey(entry);
+    if (entry.messageType !== 'request' || key === undefined) return undefined;
+    const pair = pairs().get(key);
+    if (!pair?.response?.latencyRaw) return undefined;
+    return pair.response.latencyRaw;
+  }
+
+  function copyUrl() {
+    navigator.clipboard.writeText(location.href).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  // Keyboard navigation
+  let searchInputRef: HTMLInputElement | undefined;
+
+  function handleKeyDown(e: KeyboardEvent) {
+    if (showImport() || activeTab() !== 'trace') return;
+    const target = e.target as HTMLElement;
+    const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT';
+
+    if (e.key === '/' && !isInput) {
+      e.preventDefault();
+      searchInputRef?.focus();
+      return;
+    }
+    if (e.key === 'Escape' && isInput) {
+      (target as HTMLInputElement).blur();
+      return;
+    }
+    if (isInput) return;
+
+    const items = filtered();
+    if (items.length === 0) return;
+
+    if (e.key === 'j' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      const next = Math.min(focusedIndex() + 1, items.length - 1);
+      setFocusedIndex(next);
+      const el = entryRefs[items[next].id];
+      el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } else if (e.key === 'k' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const prev = Math.max(focusedIndex() - 1, 0);
+      setFocusedIndex(prev);
+      const el = entryRefs[items[prev].id];
+      el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      const idx = focusedIndex();
+      if (idx >= 0 && idx < items.length) {
+        toggle(items[idx].id);
+      }
+    }
+  }
+
+  onMount(() => document.addEventListener('keydown', handleKeyDown));
+  onCleanup(() => document.removeEventListener('keydown', handleKeyDown));
+
   function getPairedEntry(entry: TraceEntry): TraceEntry | undefined {
-    if (entry.requestId === undefined) return undefined;
-    const pair = pairs().get(entry.requestId);
+    const key = sessionKey(entry);
+    if (key === undefined) return undefined;
+    const pair = pairs().get(key);
     if (!pair) return undefined;
     if (entry.messageType === 'request') return pair.response;
     if (entry.messageType === 'response') return pair.request;
@@ -273,7 +341,16 @@ const App: Component = () => {
         <h1>LSP Trace Viewer</h1>
         <div class="header-actions">
           <Show when={hashSize()}>
-            {(info) => <UrlSizeIndicator info={info()} />}
+            {(info) => (
+              <>
+                <UrlSizeIndicator info={info()} />
+                <Show when={info().stored}>
+                  <button class="btn btn-secondary" onClick={copyUrl} title="Copy shareable URL">
+                    {copied() ? '✓ Copied' : '📋 Copy URL'}
+                  </button>
+                </Show>
+              </>
+            )}
           </Show>
           <Show when={!showImport()}>
             <button class="btn btn-secondary" onClick={() => { setShowImport(true); clearHash(); setHashSize(null); }}>Import New</button>
@@ -341,14 +418,21 @@ const App: Component = () => {
           >
             Files ({trackedFiles().size})
           </button>
+          <button
+            class={`tab ${activeTab() === 'timeline' ? 'active' : ''}`}
+            onClick={() => setActiveTab('timeline')}
+          >
+            Timeline
+          </button>
         </nav>
 
         <Show when={activeTab() === 'trace'}>
           <section class="filters">
             <input
+              ref={searchInputRef}
               type="text"
               class="filter-search"
-              placeholder="Search methods, payloads..."
+              placeholder="Search (press / to focus)..."
               value={searchText()}
               onInput={(e) => setSearchText(e.currentTarget.value)}
             />
@@ -448,21 +532,22 @@ const App: Component = () => {
                         <span class="session-separator-line" />
                       </div>
                     </Show>
-                    <div ref={(el) => { entryRefs[entry.id] = el; }}>
+                    <div ref={(el) => { entryRefs[entry.id] = el; }} class={focusedIndex() === i() ? 'entry-focused' : ''}>
                       <TraceEntryRow
                         entry={entry}
                         isExpanded={expandedIds().has(entry.id)}
-                        onToggle={() => toggle(entry.id)}
+                        onToggle={() => { toggle(entry.id); setFocusedIndex(i()); }}
                         pairedEntry={getPairedEntry(entry)}
                         onScrollTo={scrollToEntry}
                         files={trackedFiles()}
                         isDark={!isLight()}
-                        isCancelled={entry.requestId !== undefined && cancellations().has(entry.requestId)}
-                        cancelledByEntry={entry.requestId !== undefined ? cancellations().get(entry.requestId) : undefined}
+                        isCancelled={sessionKey(entry) !== undefined && cancellations().has(sessionKey(entry)!)}
+                        cancelledByEntry={sessionKey(entry) !== undefined ? cancellations().get(sessionKey(entry)!) : undefined}
                         cancelTargetEntry={entry.method === '$/cancelRequest' ? (() => {
                           const rid = getCancelledRequestId(entry);
-                          return rid ? requestById().get(rid) : undefined;
+                          return rid ? requestById().get(`${entry.sessionIndex}:${rid}`) : undefined;
                         })() : undefined}
+                        requestLatency={getRequestLatency(entry)}
                       />
                     </div>
                   </>
@@ -470,6 +555,10 @@ const App: Component = () => {
               }}
             </For>
           </section>
+        </Show>
+
+        <Show when={activeTab() === 'timeline'}>
+          <Timeline entries={entries()} pairs={pairs()} cancellations={cancellations()} onScrollTo={scrollToEntry} />
         </Show>
 
         <Show when={activeTab() === 'files'}>

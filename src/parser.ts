@@ -156,23 +156,30 @@ export function matchRequestResponse(entries: TraceEntry[]): Map<string, { reque
   for (const entry of entries) {
     if (entry.requestId === undefined) continue;
     if (entry.messageType === 'request' || entry.messageType === 'response') {
-      const existing = pairs.get(entry.requestId) ?? {};
+      const key = `${entry.sessionIndex}:${entry.requestId}`;
+      const existing = pairs.get(key) ?? {};
       if (entry.messageType === 'request') existing.request = entry;
       else existing.response = entry;
-      pairs.set(entry.requestId, existing);
+      pairs.set(key, existing);
     }
   }
   return pairs;
 }
 
-/** Build a map from cancelled request ID to the $/cancelRequest entry that cancelled it */
+/** Session-scoped key for a request ID */
+export function sessionKey(entry: TraceEntry): string | undefined {
+  if (entry.requestId === undefined) return undefined;
+  return `${entry.sessionIndex}:${entry.requestId}`;
+}
+
+/** Build a map from session:cancelledRequestId to the $/cancelRequest entry that cancelled it */
 export function getCancellations(entries: TraceEntry[]): Map<string, TraceEntry> {
   const cancellations = new Map<string, TraceEntry>();
   for (const entry of entries) {
     if (entry.method === '$/cancelRequest' && entry.body && typeof entry.body === 'object') {
       const id = (entry.body as { id?: string | number }).id;
       if (id !== undefined) {
-        cancellations.set(String(id), entry);
+        cancellations.set(`${entry.sessionIndex}:${String(id)}`, entry);
       }
     }
   }

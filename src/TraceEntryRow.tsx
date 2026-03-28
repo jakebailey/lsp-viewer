@@ -19,9 +19,11 @@ const TraceEntryRow: Component<{
   isCancelled?: boolean;
   cancelledByEntry?: TraceEntry;
   cancelTargetEntry?: TraceEntry;
+  requestLatency?: string;
 }> = (props) => {
   const dirClass = () => props.entry.direction === 'sent' ? 'dir-sent' : 'dir-received';
   const typeClass = () => `type-${props.entry.messageType}`;
+  const isError = () => props.entry.bodyLabel === 'Error';
 
   const dirArrow = () => props.entry.direction === 'sent' ? '→' : '←';
   const dirLabel = () => props.entry.direction === 'sent' ? 'Sent' : 'Recv';
@@ -71,18 +73,24 @@ const TraceEntryRow: Component<{
   });
 
   return (
-    <div class={`trace-entry ${dirClass()} ${typeClass()} ${props.isExpanded ? 'expanded' : ''} ${props.isCancelled ? 'cancelled' : ''}`}>
+    <div class={`trace-entry ${dirClass()} ${typeClass()} ${props.isExpanded ? 'expanded' : ''} ${props.isCancelled ? 'cancelled' : ''} ${isError() ? 'error-response' : ''}`}>
       <div class="trace-header" onClick={props.onToggle}>
         <span class="trace-time">{timeOnly()}</span>
         <span class={`trace-dir ${dirClass()}`}>{dirArrow()} {dirLabel()}</span>
-        <span class={`trace-type-badge ${typeClass()}`}>{typeBadge()}</span>
+        <span class={`trace-type-badge ${typeClass()} ${isError() ? 'type-error' : ''}`}>{isError() ? 'ERR' : typeBadge()}</span>
         <span class="trace-id">{props.entry.requestId !== undefined ? `#${props.entry.requestId}` : ''}</span>
         <span class="trace-method">{props.entry.method}</span>
         <Show when={props.isCancelled}>
           <span class="trace-cancelled-badge">CANCELLED</span>
         </Show>
+        <Show when={isError()}>
+          <span class="trace-error-badge">ERROR</span>
+        </Show>
         <Show when={props.entry.latencyRaw}>
-          <span class="trace-latency">{props.entry.latencyRaw}</span>
+          <span class={`trace-latency ${isError() ? 'latency-error' : ''}`}>{props.entry.latencyRaw}</span>
+        </Show>
+        <Show when={props.requestLatency && !props.entry.latencyRaw}>
+          <span class="trace-latency trace-latency-inherited" title="Round-trip time from response">{props.requestLatency}</span>
         </Show>
         <Show when={props.pairedEntry}>
           <button
