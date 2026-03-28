@@ -950,6 +950,21 @@
   text-align: right;
 }
 
+.file-diff-toggle {
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+
+.file-diff-view {
+  flex: 1;
+  overflow: auto;
+  padding: 0;
+}
+
+.file-diff-view .diff-table {
+  font-size: 13px;
+}
+
 .file-code {
   flex: 1;
   overflow: auto;

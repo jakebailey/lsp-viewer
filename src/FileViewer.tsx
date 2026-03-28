@@ -2,6 +2,7 @@ import { type Component, createSignal, createMemo, createEffect, For, Show, on }
 import type { TrackedFile } from './fileTracker';
 import { lspLangToShiki, uriToFilename, uriToShortPath } from './fileTracker';
 import { getHighlighter, loadLang, escapeHtml, type Highlighter } from './highlighter';
+import { diffLines, collapseDiff, type DiffLine } from './diff';
 
 const FileViewer: Component<{
   files: Map<string, TrackedFile>;
@@ -9,6 +10,7 @@ const FileViewer: Component<{
 }> = (props) => {
   const [selectedUri, setSelectedUri] = createSignal<string | null>(null);
   const [snapshotIndex, setSnapshotIndex] = createSignal(0);
+  const [showDiff, setShowDiff] = createSignal(false);
   const [highlightedHtml, setHighlightedHtml] = createSignal('');
   const [highlighter, setHighlighter] = createSignal<Highlighter | null>(null);
 
@@ -31,6 +33,22 @@ const FileViewer: Component<{
     if (!file) return null;
     const idx = Math.min(snapshotIndex(), file.snapshots.length - 1);
     return file.snapshots[idx] ?? null;
+  });
+
+  const previousSnapshot = createMemo(() => {
+    const file = selectedFile();
+    if (!file) return null;
+    const idx = Math.min(snapshotIndex(), file.snapshots.length - 1);
+    return idx > 0 ? file.snapshots[idx - 1] : null;
+  });
+
+  const diffResult = createMemo(() => {
+    if (!showDiff()) return [];
+    const prev = previousSnapshot();
+    const curr = currentSnapshot();
+    if (!prev || !curr) return [];
+    const lines = diffLines(prev.text, curr.text);
+    return collapseDiff(lines);
   });
 
   // Auto-select first file if none selected
@@ -125,9 +143,53 @@ const FileViewer: Component<{
                       class="file-slider"
                     />
                     <span class="file-version-num">{snapshotIndex() + 1} / {file.snapshots.length}</span>
+                    <Show when={snapshotIndex() > 0}>
+                      <label class="filter-toggle file-diff-toggle">
+                        <input
+                          type="checkbox"
+                          checked={showDiff()}
+                          onChange={(e) => setShowDiff(e.currentTarget.checked)}
+                        />
+                        Diff
+                      </label>
+                    </Show>
                   </div>
                 </Show>
-                <div class="file-code" innerHTML={highlightedHtml()} />
+                <Show when={showDiff() && diffResult().length > 0}>
+                  <div class="file-diff-view">
+                    <table class="diff-table">
+                      <For each={diffResult()}>
+                        {(line) => {
+                          if (line.type === 'collapse') {
+                            return (
+                              <tr class="diff-collapse">
+                                <td class="diff-gutter" />
+                                <td class="diff-gutter" />
+                                <td class="diff-text">⋯ {line.count} unchanged lines</td>
+                              </tr>
+                            );
+                          }
+                          const dl = line as DiffLine;
+                          return (
+                            <tr class={`diff-line diff-${dl.type}`}>
+                              <td class="diff-gutter">{dl.oldLineNum ?? ''}</td>
+                              <td class="diff-gutter">{dl.newLineNum ?? ''}</td>
+                              <td class="diff-text">
+                                <span class="diff-marker">
+                                  {dl.type === 'add' ? '+' : dl.type === 'remove' ? '-' : ' '}
+                                </span>
+                                {dl.text}
+                              </td>
+                            </tr>
+                          );
+                        }}
+                      </For>
+                    </table>
+                  </div>
+                </Show>
+                <Show when={!showDiff() || diffResult().length === 0}>
+                  <div class="file-code" innerHTML={highlightedHtml()} />
+                </Show>
               </>
             );
           }}
