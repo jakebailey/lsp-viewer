@@ -13,7 +13,6 @@ export interface TraceEntry {
   body: unknown | undefined;
   bodyRaw: string;
   bodyLabel: 'Params' | 'Result' | 'Error' | 'No result';
-  raw: string;
   sessionIndex: number;
 }
 
@@ -50,11 +49,10 @@ function matchHeader(line: string): ParsedHeader | null {
 export function parseTrace(text: string): TraceEntry[] {
   const lines = text.split('\n');
   const entries: TraceEntry[] = [];
-  let sessionIndex = 0;
+  let sessionIndex = 1;
   let current: {
     header: ParsedHeader;
     bodyLines: string[];
-    rawLines: string[];
     startIndex: number;
   } | null = null;
 
@@ -121,7 +119,6 @@ export function parseTrace(text: string): TraceEntry[] {
       body,
       bodyRaw: bodyContent,
       bodyLabel,
-      raw: current.rawLines.join('\n'),
       sessionIndex,
     });
   }
@@ -137,14 +134,13 @@ export function parseTrace(text: string): TraceEntry[] {
         // Flush previous entry first so it gets the old session index
         flushEntry();
         sessionIndex++;
-        current = { header, bodyLines: [], rawLines: [line], startIndex: i };
+        current = { header, bodyLines: [], startIndex: i };
       } else {
         flushEntry();
-        current = { header, bodyLines: [], rawLines: [line], startIndex: i };
+        current = { header, bodyLines: [], startIndex: i };
       }
     } else if (current) {
       current.bodyLines.push(line);
-      current.rawLines.push(line);
     }
   }
   flushEntry();

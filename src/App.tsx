@@ -132,13 +132,12 @@ const App: Component = () => {
 
     if (noise) result = result.filter(e => !LOG_METHODS.has(e.method));
     if (cancelled) {
-      const cancelledKeys = new Set(cancellations().keys());
       result = result.filter(e => {
         // Hide $/cancelRequest notifications themselves
         if (e.method === '$/cancelRequest') return false;
         // Hide requests/responses that were cancelled
         const key = sessionKey(e);
-        if (key !== undefined && cancelledKeys.has(key)) return false;
+        if (key !== undefined && cancellations().has(key)) return false;
         return true;
       });
     }
@@ -166,11 +165,14 @@ const App: Component = () => {
 
   const stats = createMemo(() => {
     const all = entries();
-    const requests = all.filter(e => e.messageType === 'request').length;
-    const responses = all.filter(e => e.messageType === 'response').length;
-    const notifications = all.filter(e => e.messageType === 'notification').length;
-    const sent = all.filter(e => e.direction === 'sent').length;
-    const received = all.filter(e => e.direction === 'received').length;
+    let requests = 0, responses = 0, notifications = 0, sent = 0, received = 0;
+    for (const e of all) {
+      if (e.messageType === 'request') requests++;
+      else if (e.messageType === 'response') responses++;
+      else notifications++;
+      if (e.direction === 'sent') sent++;
+      else received++;
+    }
     return { total: all.length, requests, responses, notifications, sent, received };
   });
 
@@ -608,14 +610,16 @@ const App: Component = () => {
                 };
                 const showSeparator = () => {
                   const ps = prevSession();
-                  return ps !== undefined && ps !== entry.sessionIndex;
+                  // Show separator at session boundaries, including before the first entry if multi-session
+                  if (ps !== undefined) return ps !== entry.sessionIndex;
+                  return sessions().length > 1;
                 };
                 return (
                   <>
                     <Show when={showSeparator()}>
                       <div class="session-separator">
                         <span class="session-separator-line" />
-                        <span class="session-separator-label">Session {entry.sessionIndex} — initialize</span>
+                        <span class="session-separator-label">Session {entry.sessionIndex}</span>
                         <span class="session-separator-line" />
                       </div>
                     </Show>
