@@ -1,5 +1,5 @@
 import { createSignal, createMemo, For, Show, type Component, onMount, onCleanup } from 'solid-js';
-import { parseTrace, matchRequestResponse, getSessions, getMethodCategory, getCancellations, getCancelledRequestId, getProgressTracking, getProgressToken, sessionKey, LOG_METHODS, type TraceEntry, type Direction, type MessageType } from './parser';
+import { parseTrace, matchRequestResponse, getSessions, getMethodCategory, getCancellations, getCancelledRequestId, getProgressTracking, sessionKey, LOG_METHODS, type TraceEntry, type Direction, type MessageType } from './parser';
 import TraceEntryRow, { createExpandedSet } from './TraceEntryRow';
 import { saveTrace, loadTrace, listTraces, deleteTrace, getTraceIdFromHash, clearTraceHash, formatAge, type StoredTrace } from './traceStore';
 import { trackFiles } from './fileTracker';
