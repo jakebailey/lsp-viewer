@@ -608,32 +608,93 @@
   outline-offset: -2px;
 }
 
-/* URL size indicator */
-.url-size-indicator {
-  position: relative;
-  display: inline-flex;
+/* Saved traces list */
+.saved-traces {
+  margin-top: 20px;
+}
+
+.saved-traces-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0 0 8px;
+}
+
+.saved-traces-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.saved-trace-item {
+  display: flex;
   align-items: center;
-  cursor: help;
-  vertical-align: middle;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+  overflow: hidden;
+  transition: border-color 0.15s;
 }
 
-.url-size-indicator svg {
-  display: block;
+.saved-trace-item:hover {
+  border-color: var(--accent-border);
 }
 
-.url-size-warning {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: var(--error-color);
-  color: #fff;
-  font-size: 9px;
-  font-weight: 700;
-  line-height: 12px;
-  text-align: center;
+.saved-trace-item.active {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.saved-trace-load {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  min-width: 0;
+}
+
+.saved-trace-load:hover {
+  color: var(--accent);
+}
+
+.saved-trace-label {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.saved-trace-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.saved-trace-delete {
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  border-left: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.saved-trace-delete:hover {
+  color: var(--error-color);
+  background: rgba(220, 38, 38, 0.08);
 }
 
 /* Filter toggle (checkbox) */

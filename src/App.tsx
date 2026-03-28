@@ -1,66 +1,13 @@
 import { createSignal, createMemo, For, Show, type Component, onMount, onCleanup } from 'solid-js';
 import { parseTrace, matchRequestResponse, getSessions, getMethodCategory, getCancellations, getCancelledRequestId, sessionKey, LOG_METHODS, type TraceEntry, type Direction, type MessageType } from './parser';
 import TraceEntryRow, { createExpandedSet } from './TraceEntryRow';
-import { readTraceFromHash, writeTraceToHash, clearHash, type HashSizeInfo } from './hashState';
+import { saveTrace, loadTrace, listTraces, deleteTrace, getTraceIdFromHash, clearTraceHash, formatAge, type StoredTrace } from './traceStore';
 import { trackFiles } from './fileTracker';
 import { formatJson } from './formatJson';
 import FileViewer from './FileViewer';
 import Timeline from './Timeline';
 import Analytics from './Analytics';
 import './App.css';
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-}
-
-const UrlSizeIndicator: Component<{ info: HashSizeInfo }> = (props) => {
-  const pct = () => Math.min(props.info.ratio * 100, 100);
-  const color = () => {
-    const r = props.info.ratio;
-    if (r > 1) return 'var(--error-color)';
-    if (r > 0.75) return 'var(--not-color)';
-    if (r > 0.5) return 'var(--accent)';
-    return 'var(--received-color)';
-  };
-  const tooltip = () => {
-    const { compressedLength, maxLength, tooLarge, stored } = props.info;
-    const lines = [
-      `Compressed: ${formatBytes(compressedLength)}`,
-      `Limit: ${formatBytes(maxLength)} (~2 MB)`,
-      `Usage: ${pct().toFixed(1)}%`,
-    ];
-    if (tooLarge) lines.push('⚠ Too large for URL — not stored');
-    else if (stored) lines.push('✓ Stored in URL — shareable');
-    return lines.join('\n');
-  };
-
-  // SVG pie chart
-  const r = 10;
-  const circumference = 2 * Math.PI * r;
-  const dashLen = () => circumference * Math.min(props.info.ratio, 1);
-
-  return (
-    <span class="url-size-indicator" title={tooltip()}>
-      <svg width="24" height="24" viewBox="0 0 24 24">
-        <circle cx="12" cy="12" r={r} fill="none" stroke="var(--border)" stroke-width="3" />
-        <circle
-          cx="12" cy="12" r={r}
-          fill="none"
-          stroke={color()}
-          stroke-width="3"
-          stroke-dasharray={`${dashLen()} ${circumference}`}
-          stroke-dashoffset={circumference * 0.25}
-          stroke-linecap="round"
-        />
-      </svg>
-      <Show when={props.info.tooLarge}>
-        <span class="url-size-warning">!</span>
-      </Show>
-    </span>
-  );
-};
 
 const App: Component = () => {
   const [rawText, setRawText] = createSignal('');
@@ -73,11 +20,12 @@ const App: Component = () => {
   const [filterSession, setFilterSession] = createSignal<number | ''>('');
   const [showImport, setShowImport] = createSignal(true);
   const [isLight, setIsLight] = createSignal(false);
-  const [hashSize, setHashSize] = createSignal<HashSizeInfo | null>(null);
   const [activeTab, setActiveTab] = createSignal<'trace' | 'files' | 'timeline' | 'analytics'>('trace');
   const [focusedIndex, setFocusedIndex] = createSignal(-1);
   const [copied, setCopied] = createSignal(false);
   const [showHelp, setShowHelp] = createSignal(false);
+  const [traceId, setTraceId] = createSignal<string | null>(null);
+  const [savedTraces, setSavedTraces] = createSignal<StoredTrace[]>([]);
 
   function toggleTheme() {
     const next = !isLight();
@@ -88,8 +36,12 @@ const App: Component = () => {
 
   const { expandedIds, toggle, expandAll, collapseAll } = createExpandedSet();
 
-  // Restore from URL hash on mount
-  onMount(() => {
+  async function refreshSavedTraces() {
+    try { setSavedTraces(await listTraces()); } catch {}
+  }
+
+  // Restore from IndexedDB on mount
+  onMount(async () => {
     // Restore theme preference
     try {
       const savedTheme = localStorage.getItem('lsp-viewer-theme');
@@ -99,14 +51,19 @@ const App: Component = () => {
       }
     } catch {}
 
-    const saved = readTraceFromHash();
-    if (saved) {
-      setRawText(saved);
-      const parsed = parseTrace(saved);
-      setEntries(parsed);
-      if (parsed.length > 0) {
-        setShowImport(false);
-        setHashSize(writeTraceToHash(saved));
+    await refreshSavedTraces();
+
+    const id = getTraceIdFromHash();
+    if (id) {
+      const stored = await loadTrace(id);
+      if (stored) {
+        setRawText(stored.raw);
+        const parsed = parseTrace(stored.raw);
+        setEntries(parsed);
+        if (parsed.length > 0) {
+          setShowImport(false);
+          setTraceId(id);
+        }
       }
     }
   });
@@ -195,13 +152,15 @@ const App: Component = () => {
     return { total: all.length, requests, responses, notifications, sent, received };
   });
 
-  function handleParse() {
+  async function handleParse() {
     const text = rawText();
     const parsed = parseTrace(text);
     setEntries(parsed);
     if (parsed.length > 0) {
       setShowImport(false);
-      setHashSize(writeTraceToHash(text));
+      const id = await saveTrace(text);
+      setTraceId(id);
+      await refreshSavedTraces();
     }
     collapseAll();
   }
@@ -217,8 +176,8 @@ const App: Component = () => {
     setFilterSession('');
     setHideLogging(true);
     collapseAll();
-    clearHash();
-    setHashSize(null);
+    clearTraceHash();
+    setTraceId(null);
   }
 
   function scrollToEntry(id: number) {
@@ -272,6 +231,38 @@ const App: Component = () => {
     a.download = `lsp-trace-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  function exportRaw() {
+    const text = rawText();
+    if (!text) return;
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `lsp-trace-${new Date().toISOString().slice(0, 10)}.log`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleDeleteTrace(id: string) {
+    await deleteTrace(id);
+    await refreshSavedTraces();
+    if (traceId() === id) {
+      handleClear();
+    }
+  }
+
+  async function handleLoadSavedTrace(stored: StoredTrace) {
+    setRawText(stored.raw);
+    const parsed = parseTrace(stored.raw);
+    setEntries(parsed);
+    if (parsed.length > 0) {
+      setShowImport(false);
+      setTraceId(stored.id);
+      history.replaceState(null, '', `#t=${stored.id}`);
+    }
+    collapseAll();
   }
 
   // Keyboard navigation
@@ -346,14 +337,16 @@ const App: Component = () => {
     const file = e.dataTransfer?.files[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = () => {
+      reader.onload = async () => {
         const text = reader.result as string;
         setRawText(text);
         const parsed = parseTrace(text);
         setEntries(parsed);
         if (parsed.length > 0) {
           setShowImport(false);
-          setHashSize(writeTraceToHash(text));
+          const id = await saveTrace(text, file.name);
+          setTraceId(id);
+          await refreshSavedTraces();
         }
         collapseAll();
       };
@@ -366,14 +359,16 @@ const App: Component = () => {
     const file = target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = () => {
+      reader.onload = async () => {
         const text = reader.result as string;
         setRawText(text);
         const parsed = parseTrace(text);
         setEntries(parsed);
         if (parsed.length > 0) {
           setShowImport(false);
-          setHashSize(writeTraceToHash(text));
+          const id = await saveTrace(text, file.name);
+          setTraceId(id);
+          await refreshSavedTraces();
         }
         collapseAll();
       };
@@ -386,21 +381,10 @@ const App: Component = () => {
       <header class="app-header">
         <h1>LSP Trace Viewer</h1>
         <div class="header-actions">
-          <Show when={hashSize()}>
-            {(info) => (
-              <>
-                <UrlSizeIndicator info={info()} />
-                <Show when={info().stored}>
-                  <button class="btn btn-secondary" onClick={copyUrl} title="Copy shareable URL">
-                    {copied() ? '✓ Copied' : '📋 Copy URL'}
-                  </button>
-                </Show>
-              </>
-            )}
-          </Show>
           <Show when={!showImport()}>
-            <button class="btn btn-secondary" onClick={exportFiltered} title="Export filtered results as JSON">Export</button>
-            <button class="btn btn-secondary" onClick={() => { setShowImport(true); clearHash(); setHashSize(null); }}>Import New</button>
+            <button class="btn btn-secondary" onClick={exportRaw} title="Download original trace log">Save .log</button>
+            <button class="btn btn-secondary" onClick={exportFiltered} title="Export filtered results as JSON">Export JSON</button>
+            <button class="btn btn-secondary" onClick={() => { setShowImport(true); clearTraceHash(); setTraceId(null); }}>Import New</button>
             <button class="btn btn-secondary" onClick={handleClear}>Clear</button>
           </Show>
           <button class="btn btn-secondary btn-help" onClick={() => setShowHelp(v => !v)} title="Keyboard shortcuts (?)">?</button>
@@ -436,6 +420,29 @@ const App: Component = () => {
               </button>
             </Show>
           </div>
+
+          <Show when={savedTraces().length > 0}>
+            <div class="saved-traces">
+              <h3 class="saved-traces-title">Recent Traces</h3>
+              <div class="saved-traces-list">
+                <For each={savedTraces()}>
+                  {(t) => (
+                    <div class={`saved-trace-item ${traceId() === t.id ? 'active' : ''}`}>
+                      <button class="saved-trace-load" onClick={() => handleLoadSavedTrace(t)}>
+                        <span class="saved-trace-label">{t.label ?? `Trace ${t.id.slice(0, 6)}`}</span>
+                        <span class="saved-trace-meta">{formatAge(t.createdAt)}</span>
+                      </button>
+                      <button
+                        class="saved-trace-delete"
+                        onClick={() => handleDeleteTrace(t.id)}
+                        title="Delete"
+                      >✕</button>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </div>
+          </Show>
         </section>
       </Show>
 
