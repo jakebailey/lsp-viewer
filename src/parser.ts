@@ -217,6 +217,10 @@ export interface ProgressInfo {
   progressEntries: TraceEntry[];
   /** The request that initiated this token (if found) */
   originRequest?: TraceEntry;
+  /** The window/workDoneProgress/create entry (if server-initiated) */
+  createRequest?: TraceEntry;
+  /** The window/workDoneProgress/cancel entry (if cancelled) */
+  cancelEntry?: TraceEntry;
 }
 
 /** Build maps for progress tracking:
@@ -231,19 +235,53 @@ export function getProgressTracking(entries: TraceEntry[]): {
 } {
   const byToken = new Map<string, ProgressInfo>();
 
+  function getOrCreate(key: string): ProgressInfo {
+    let info = byToken.get(key);
+    if (!info) {
+      info = { progressEntries: [] };
+      byToken.set(key, info);
+    }
+    return info;
+  }
+
   // Collect $/progress notifications by token
   for (const entry of entries) {
     if (entry.method === '$/progress' && entry.body && typeof entry.body === 'object') {
       const token = (entry.body as { token?: ProgressToken }).token;
       if (token === undefined) continue;
       const key = progressTokenKey(entry.sessionIndex, token);
-      const info = byToken.get(key) ?? { progressEntries: [] };
-      info.progressEntries.push(entry);
-      byToken.set(key, info);
+      getOrCreate(key).progressEntries.push(entry);
     }
   }
 
-  // Link tokens back to the originating requests
+  // Handle window/workDoneProgress/create: server creates a token
+  for (const entry of entries) {
+    if (entry.method === 'window/workDoneProgress/create' && entry.body && typeof entry.body === 'object') {
+      const token = (entry.body as { token?: ProgressToken }).token;
+      if (token === undefined) continue;
+      const key = progressTokenKey(entry.sessionIndex, token);
+      const info = getOrCreate(key);
+      info.createRequest = entry;
+      if (!info.originRequest) {
+        info.originRequest = entry;
+      }
+    }
+  }
+
+  // Handle window/workDoneProgress/cancel: client cancels a progress token
+  for (const entry of entries) {
+    if (entry.method === 'window/workDoneProgress/cancel' && entry.body && typeof entry.body === 'object') {
+      const token = (entry.body as { token?: ProgressToken }).token;
+      if (token === undefined) continue;
+      const key = progressTokenKey(entry.sessionIndex, token);
+      const info = byToken.get(key);
+      if (info) {
+        info.cancelEntry = entry;
+      }
+    }
+  }
+
+  // Link tokens to originating requests via workDoneToken / partialResultToken in params
   const byRequest = new Map<string, ProgressInfo[]>();
   for (const entry of entries) {
     if (entry.messageType !== 'request') continue;
@@ -254,6 +292,7 @@ export function getProgressTracking(entries: TraceEntry[]): {
       const tokenKey = progressTokenKey(entry.sessionIndex, token);
       const info = byToken.get(tokenKey);
       if (info) {
+        // Per-request token takes priority as origin (it's the actual requesting method)
         info.originRequest = entry;
         const existing = byRequest.get(reqKey) ?? [];
         existing.push(info);
@@ -262,21 +301,12 @@ export function getProgressTracking(entries: TraceEntry[]): {
     }
   }
 
-  // Also handle window/workDoneProgress/create: server creates a token, link it to the create request
-  for (const entry of entries) {
-    if (entry.method === 'window/workDoneProgress/create' && entry.body && typeof entry.body === 'object') {
-      const token = (entry.body as { token?: ProgressToken }).token;
-      if (token === undefined) continue;
-      const key = progressTokenKey(entry.sessionIndex, token);
-      const info = byToken.get(key);
-      if (info && !info.originRequest) {
-        info.originRequest = entry;
-        if (entry.requestId !== undefined) {
-          const reqKey = `${entry.sessionIndex}:${entry.requestId}`;
-          const existing = byRequest.get(reqKey) ?? [];
-          existing.push(info);
-          byRequest.set(reqKey, existing);
-        }
+  // For server-created tokens not yet linked to a request, add to byRequest via the create entry
+  for (const info of byToken.values()) {
+    if (info.createRequest && info.createRequest.requestId !== undefined) {
+      const reqKey = `${info.createRequest.sessionIndex}:${info.createRequest.requestId}`;
+      if (!byRequest.has(reqKey)) {
+        byRequest.set(reqKey, [info]);
       }
     }
   }
