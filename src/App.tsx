@@ -1,5 +1,5 @@
 import { createSignal, createMemo, For, Show, type Component, onMount, onCleanup } from 'solid-js';
-import { parseTrace, matchRequestResponse, getSessions, getMethodCategory, getCancellations, getCancelledRequestId, sessionKey, LOG_METHODS, type TraceEntry, type Direction, type MessageType } from './parser';
+import { parseTrace, matchRequestResponse, getSessions, getMethodCategory, getCancellations, getCancelledRequestId, getProgressTracking, getProgressToken, sessionKey, LOG_METHODS, type TraceEntry, type Direction, type MessageType } from './parser';
 import TraceEntryRow, { createExpandedSet } from './TraceEntryRow';
 import { saveTrace, loadTrace, listTraces, deleteTrace, getTraceIdFromHash, clearTraceHash, formatAge, type StoredTrace } from './traceStore';
 import { trackFiles } from './fileTracker';
@@ -76,6 +76,8 @@ const App: Component = () => {
   const trackedFiles = createMemo(() => trackFiles(entries()));
 
   const cancellations = createMemo(() => getCancellations(entries()));
+
+  const progressTracking = createMemo(() => getProgressTracking(entries()));
 
   // Build a map from session:requestId to the request entry, for $/cancelRequest linking
   const requestById = createMemo(() => {
@@ -622,6 +624,8 @@ const App: Component = () => {
                           return rid ? requestById().get(`${entry.sessionIndex}:${rid}`) : undefined;
                         })() : undefined}
                         requestLatency={getRequestLatency(entry)}
+                        progressEntries={sessionKey(entry) !== undefined ? (progressTracking().byRequest.get(sessionKey(entry)!) ?? []).flatMap(p => p.progressEntries) : undefined}
+                        progressOriginEntry={entry.method === '$/progress' ? progressTracking().byProgressEntry.get(entry.id) : undefined}
                       />
                     </div>
                   </>

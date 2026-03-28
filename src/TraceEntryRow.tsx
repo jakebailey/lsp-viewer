@@ -1,6 +1,6 @@
 import { type Component, createSignal, createEffect, Show } from 'solid-js';
 import type { TraceEntry } from './parser';
-import { getCancelledRequestId } from './parser';
+import { getCancelledRequestId, getProgressToken } from './parser';
 import type { TrackedFile } from './fileTracker';
 import { getHighlighter, type Highlighter } from './highlighter';
 import { formatJson } from './formatJson';
@@ -36,6 +36,8 @@ const TraceEntryRow: Component<{
   cancelledByEntry?: TraceEntry;
   cancelTargetEntry?: TraceEntry;
   requestLatency?: string;
+  progressEntries?: TraceEntry[];
+  progressOriginEntry?: TraceEntry;
 }> = (props) => {
   const dirClass = () => props.entry.direction === 'sent' ? 'dir-sent' : 'dir-received';
   const typeClass = () => `type-${props.entry.messageType}`;
@@ -142,6 +144,30 @@ const TraceEntryRow: Component<{
             title={`Go to cancelled request: ${props.cancelTargetEntry!.method}`}
           >
             ✕ #{getCancelledRequestId(props.entry)} {props.cancelTargetEntry!.method}
+          </button>
+        </Show>
+        <Show when={props.progressEntries && props.progressEntries.length > 0}>
+          <button
+            class="trace-pair-link trace-progress-link"
+            onClick={(e) => {
+              e.stopPropagation();
+              props.onScrollTo?.(props.progressEntries![0].id);
+            }}
+            title={`${props.progressEntries!.length} progress notification(s)`}
+          >
+            ⏳ {props.progressEntries!.length} progress
+          </button>
+        </Show>
+        <Show when={props.progressOriginEntry}>
+          <button
+            class="trace-pair-link trace-progress-link"
+            onClick={(e) => {
+              e.stopPropagation();
+              props.onScrollTo?.(props.progressOriginEntry!.id);
+            }}
+            title={`Go to origin request: ${props.progressOriginEntry!.method}`}
+          >
+            ⏳ {getProgressToken(props.entry)} → {props.progressOriginEntry!.method}
           </button>
         </Show>
         <span class="trace-expand-icon">{props.isExpanded ? '▼' : '▶'}</span>

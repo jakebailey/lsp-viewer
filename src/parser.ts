@@ -18,7 +18,8 @@ export interface TraceEntry {
 }
 
 // New format: "2026-03-27 21:18:04.090 [trace] Sending request 'method' in 3ms."
-const NEW_HEADER = /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) \[trace\] (Sending|Received) (notification|request|response) '([^']+)'(?: in (\d+(?:\.\d+)?)(ms|µs|s))?\.?\s*$/;
+// Also handles: "... 'method'. Processing request took 0ms"
+const NEW_HEADER = /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) \[trace\] (Sending|Received) (notification|request|response) '([^']+)'(?: in (\d+(?:\.\d+)?)(ms|µs|s))?\.?(?:\s*Processing request took (\d+(?:\.\d+)?)(ms|µs|s))?\s*$/;
 
 // Old format: "[Trace - 9:31:59 PM] Sending response 'method'. Processing request took 1ms"
 const OLD_HEADER = /^\[Trace\s*-\s*([^\]]+)\]\s*(Sending|Received)\s+(notification|request|response)\s+'([^']+)'\.(?:\s*Processing request took (\d+(?:\.\d+)?)(ms|µs|s))?\s*$/;
@@ -37,7 +38,7 @@ interface ParsedHeader {
 function matchHeader(line: string): ParsedHeader | null {
   let m = line.match(NEW_HEADER);
   if (m) {
-    return { timestamp: m[1], direction: m[2], messageType: m[3], rawMethod: m[4], latencyNum: m[5], latencyUnit: m[6] };
+    return { timestamp: m[1], direction: m[2], messageType: m[3], rawMethod: m[4], latencyNum: m[5] ?? m[7], latencyUnit: m[6] ?? m[8] };
   }
   m = line.match(OLD_HEADER);
   if (m) {
@@ -191,6 +192,111 @@ export function getCancelledRequestId(entry: TraceEntry): string | undefined {
   if (entry.method !== '$/cancelRequest' || !entry.body || typeof entry.body !== 'object') return undefined;
   const id = (entry.body as { id?: string | number }).id;
   return id !== undefined ? String(id) : undefined;
+}
+
+type ProgressToken = string | number;
+
+function progressTokenKey(sessionIndex: number, token: ProgressToken): string {
+  return `${sessionIndex}:${String(token)}`;
+}
+
+/** Extract workDoneToken / partialResultToken from a request's params */
+function extractProgressTokens(body: unknown): ProgressToken[] {
+  if (!body || typeof body !== 'object') return [];
+  const b = body as Record<string, unknown>;
+  const tokens: ProgressToken[] = [];
+  for (const key of ['workDoneToken', 'partialResultToken']) {
+    const v = b[key];
+    if (typeof v === 'string' || typeof v === 'number') tokens.push(v);
+  }
+  return tokens;
+}
+
+export interface ProgressInfo {
+  /** The $/progress notification entries for this token */
+  progressEntries: TraceEntry[];
+  /** The request that initiated this token (if found) */
+  originRequest?: TraceEntry;
+}
+
+/** Build maps for progress tracking:
+ *  - byToken: session:token -> ProgressInfo ($/progress entries + origin request)
+ *  - byRequest: session:requestId -> ProgressInfo[] (progress infos for a request)
+ *  - byProgressEntry: entry.id -> origin request entry
+ */
+export function getProgressTracking(entries: TraceEntry[]): {
+  byToken: Map<string, ProgressInfo>;
+  byRequest: Map<string, ProgressInfo[]>;
+  byProgressEntry: Map<number, TraceEntry>;
+} {
+  const byToken = new Map<string, ProgressInfo>();
+
+  // Collect $/progress notifications by token
+  for (const entry of entries) {
+    if (entry.method === '$/progress' && entry.body && typeof entry.body === 'object') {
+      const token = (entry.body as { token?: ProgressToken }).token;
+      if (token === undefined) continue;
+      const key = progressTokenKey(entry.sessionIndex, token);
+      const info = byToken.get(key) ?? { progressEntries: [] };
+      info.progressEntries.push(entry);
+      byToken.set(key, info);
+    }
+  }
+
+  // Link tokens back to the originating requests
+  const byRequest = new Map<string, ProgressInfo[]>();
+  for (const entry of entries) {
+    if (entry.messageType !== 'request') continue;
+    const tokens = extractProgressTokens(entry.body);
+    if (tokens.length === 0) continue;
+    const reqKey = `${entry.sessionIndex}:${entry.requestId}`;
+    for (const token of tokens) {
+      const tokenKey = progressTokenKey(entry.sessionIndex, token);
+      const info = byToken.get(tokenKey);
+      if (info) {
+        info.originRequest = entry;
+        const existing = byRequest.get(reqKey) ?? [];
+        existing.push(info);
+        byRequest.set(reqKey, existing);
+      }
+    }
+  }
+
+  // Also handle window/workDoneProgress/create: server creates a token, link it to the create request
+  for (const entry of entries) {
+    if (entry.method === 'window/workDoneProgress/create' && entry.body && typeof entry.body === 'object') {
+      const token = (entry.body as { token?: ProgressToken }).token;
+      if (token === undefined) continue;
+      const key = progressTokenKey(entry.sessionIndex, token);
+      const info = byToken.get(key);
+      if (info && !info.originRequest) {
+        info.originRequest = entry;
+        if (entry.requestId !== undefined) {
+          const reqKey = `${entry.sessionIndex}:${entry.requestId}`;
+          const existing = byRequest.get(reqKey) ?? [];
+          existing.push(info);
+          byRequest.set(reqKey, existing);
+        }
+      }
+    }
+  }
+
+  // Build reverse map: $/progress entry id -> origin request
+  const byProgressEntry = new Map<number, TraceEntry>();
+  for (const info of byToken.values()) {
+    if (!info.originRequest) continue;
+    for (const pe of info.progressEntries) {
+      byProgressEntry.set(pe.id, info.originRequest);
+    }
+  }
+
+  return { byToken, byRequest, byProgressEntry };
+}
+
+/** For a $/progress entry, get its token */
+export function getProgressToken(entry: TraceEntry): ProgressToken | undefined {
+  if (entry.method !== '$/progress' || !entry.body || typeof entry.body !== 'object') return undefined;
+  return (entry.body as { token?: ProgressToken }).token;
 }
 
 // Methods that are logging/trace infrastructure, not real LSP traffic

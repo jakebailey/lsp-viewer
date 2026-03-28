@@ -571,6 +571,15 @@
   background: rgba(220, 38, 38, 0.1) !important;
 }
 
+.trace-progress-link {
+  color: var(--warning-color) !important;
+  border-color: rgba(229, 165, 10, 0.3) !important;
+}
+
+.trace-progress-link:hover {
+  background: rgba(229, 165, 10, 0.1) !important;
+}
+
 /* Error responses */
 .trace-entry.error-response {
   border-left-color: var(--error-color) !important;
