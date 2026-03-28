@@ -211,14 +211,23 @@ export function trackFiles(entries: TraceEntry[]): Map<string, TrackedFile> {
 
 /** Map LSP languageId to a shiki language identifier */
 export function lspLangToShiki(languageId: string): string {
+  // Most VS Code / LSP language IDs match shiki's bundled language names directly.
+  // This map handles the ones that don't.
   const map: Record<string, string> = {
     'typescriptreact': 'tsx',
     'javascriptreact': 'jsx',
-    'shellscript': 'bash',
     'dockercompose': 'yaml',
-    'objective-c': 'objc',
-    'objective-cpp': 'objc',
-    'csharp': 'c#',
+    'git-commit': 'text',
+    'git-rebase': 'text',
+    'pip-requirements': 'text',
+    'plaintext': 'text',
+    'raw': 'text',
+    'scminput': 'text',
+    'search-result': 'text',
+    'jsonc': 'json',
+    'jade': 'pug',
+    'postcss': 'css',
+    'stylus': 'css',
   };
   return map[languageId] ?? languageId;
 }
