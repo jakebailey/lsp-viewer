@@ -434,6 +434,8 @@ const App: Component = () => {
                         onToggle={() => toggle(entry.id)}
                         pairedEntry={getPairedEntry(entry)}
                         onScrollTo={scrollToEntry}
+                        files={trackedFiles()}
+                        isDark={!isLight()}
                       />
                     </div>
                   </>

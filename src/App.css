@@ -376,9 +376,140 @@
   padding: 0;
 }
 
+.trace-body-highlighted {
+  overflow-x: auto;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.trace-body-highlighted pre {
+  margin: 0;
+  padding: 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+  tab-size: 2;
+}
+
+.trace-body-highlighted code {
+  font: inherit;
+  background: none;
+  padding: 0;
+}
+
 .trace-body-empty {
   font-size: 12px;
   color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Inline file content in trace entries */
+.trace-file-content {
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+  padding-top: 8px;
+}
+
+.trace-file-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.trace-file-code {
+  max-height: 400px;
+  overflow: auto;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.trace-file-code pre {
+  margin: 0;
+  padding: 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.5;
+  tab-size: 4;
+}
+
+.trace-file-code code {
+  font: inherit;
+  background: none;
+  padding: 0;
+}
+
+/* Diff view */
+.trace-diff {
+  max-height: 400px;
+  overflow: auto;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+}
+
+.diff-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.5;
+  table-layout: fixed;
+}
+
+.diff-table tr {
+  border: none;
+}
+
+.diff-gutter {
+  width: 40px;
+  padding: 0 6px;
+  text-align: right;
+  color: var(--text-muted);
+  opacity: 0.5;
+  user-select: none;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.diff-text {
+  padding: 0 8px;
+  white-space: pre;
+  overflow: hidden;
+}
+
+.diff-marker {
+  display: inline-block;
+  width: 14px;
+  user-select: none;
+}
+
+.diff-line.diff-add {
+  background: rgba(52, 211, 153, 0.1);
+}
+
+.diff-line.diff-add .diff-marker {
+  color: var(--received-color);
+}
+
+.diff-line.diff-remove {
+  background: rgba(248, 113, 113, 0.1);
+}
+
+.diff-line.diff-remove .diff-marker {
+  color: var(--error-color);
+}
+
+.diff-collapse {
+  background: var(--code-bg);
+}
+
+.diff-collapse .diff-text {
+  padding: 4px 8px;
+  color: var(--text-muted);
+  font-size: 11px;
   font-style: italic;
 }
 

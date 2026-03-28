@@ -1,5 +1,10 @@
-import { type Component, createSignal, Show } from 'solid-js';
+import { type Component, createSignal, createEffect, Show } from 'solid-js';
 import type { TraceEntry } from './parser';
+import type { TrackedFile } from './fileTracker';
+import { getHighlighter, type Highlighter } from './highlighter';
+import TraceFileContent from './TraceFileContent';
+
+const FILE_METHODS = new Set(['textDocument/didOpen', 'textDocument/didChange', 'textDocument/didClose']);
 
 const TraceEntryRow: Component<{
   entry: TraceEntry;
@@ -7,6 +12,8 @@ const TraceEntryRow: Component<{
   onToggle: () => void;
   pairedEntry?: TraceEntry;
   onScrollTo?: (id: number) => void;
+  files?: Map<string, TrackedFile>;
+  isDark?: boolean;
 }> = (props) => {
   const dirClass = () => props.entry.direction === 'sent' ? 'dir-sent' : 'dir-received';
   const typeClass = () => `type-${props.entry.messageType}`;
@@ -32,6 +39,31 @@ const TraceEntryRow: Component<{
     if (typeof props.entry.body === 'string') return props.entry.body;
     return JSON.stringify(props.entry.body, null, 2);
   };
+
+  const [highlightedBody, setHighlightedBody] = createSignal('');
+  const [highlighter, setHighlighter] = createSignal<Highlighter | null>(null);
+
+  createEffect(() => {
+    if (props.isExpanded && !highlighter()) {
+      getHighlighter().then(h => setHighlighter(h));
+    }
+  });
+
+  createEffect(() => {
+    const h = highlighter();
+    if (!props.isExpanded || !h) {
+      setHighlightedBody('');
+      return;
+    }
+    const body = formatBody();
+    if (!body) return;
+    const theme = (props.isDark ?? true) ? 'github-dark-default' : 'github-light-default';
+    try {
+      setHighlightedBody(h.codeToHtml(body, { lang: 'json', theme }));
+    } catch {
+      setHighlightedBody('');
+    }
+  });
 
   return (
     <div class={`trace-entry ${dirClass()} ${typeClass()} ${props.isExpanded ? 'expanded' : ''}`}>
@@ -64,7 +96,18 @@ const TraceEntryRow: Component<{
         <div class="trace-body">
           <div class="trace-body-label">{props.entry.bodyLabel}:</div>
           <Show when={props.entry.body !== undefined} fallback={<div class="trace-body-empty">No content</div>}>
-            <pre class="trace-body-content"><code>{formatBody()}</code></pre>
+            <Show when={highlightedBody()} fallback={
+              <pre class="trace-body-content"><code>{formatBody()}</code></pre>
+            }>
+              <div class="trace-body-highlighted" innerHTML={highlightedBody()} />
+            </Show>
+          </Show>
+          <Show when={props.files && FILE_METHODS.has(props.entry.method)}>
+            <TraceFileContent
+              entry={props.entry}
+              files={props.files!}
+              isDark={props.isDark ?? true}
+            />
           </Show>
         </div>
       </Show>

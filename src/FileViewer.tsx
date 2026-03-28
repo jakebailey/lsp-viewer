@@ -1,33 +1,7 @@
 import { type Component, createSignal, createMemo, createEffect, For, Show, on } from 'solid-js';
-import { createHighlighter } from 'shiki';
-import type { HighlighterGeneric, BundledLanguage, BundledTheme } from 'shiki';
 import type { TrackedFile } from './fileTracker';
 import { lspLangToShiki, uriToFilename, uriToShortPath } from './fileTracker';
-
-type Highlighter = HighlighterGeneric<BundledLanguage, BundledTheme>;
-let highlighterPromise: Promise<Highlighter> | undefined;
-
-async function getHighlighter(): Promise<Highlighter> {
-  if (!highlighterPromise) {
-    highlighterPromise = createHighlighter({
-      themes: ['github-dark-default', 'github-light-default'],
-      langs: [],
-    });
-  }
-  return highlighterPromise;
-}
-
-async function loadLang(highlighter: Highlighter, lang: string): Promise<boolean> {
-  const loaded = highlighter.getLoadedLanguages();
-  if (loaded.includes(lang as BundledLanguage)) return true;
-  try {
-    await highlighter.loadLanguage(lang as BundledLanguage);
-    return true;
-  } catch {
-    // lang not available
-  }
-  return false;
-}
+import { getHighlighter, loadLang, escapeHtml, type Highlighter } from './highlighter';
 
 const FileViewer: Component<{
   files: Map<string, TrackedFile>;
@@ -162,12 +136,5 @@ const FileViewer: Component<{
     </div>
   );
 };
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
 
 export default FileViewer;
