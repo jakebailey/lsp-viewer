@@ -26,6 +26,15 @@ const App: Component = () => {
   const [traceId, setTraceId] = createSignal<string | null>(null);
   const [savedTraces, setSavedTraces] = createSignal<StoredTrace[]>([]);
 
+  // Debounced search
+  let searchDebounceTimer: ReturnType<typeof setTimeout> | undefined;
+  const [debouncedSearch, setDebouncedSearch] = createSignal('');
+  function handleSearchInput(value: string) {
+    setSearchText(value);
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => setDebouncedSearch(value), 150);
+  }
+
   function toggleTheme() {
     const next = !isLight();
     setIsLight(next);
@@ -116,7 +125,7 @@ const App: Component = () => {
     const method = filterMethod();
     const dir = filterDirection();
     const type = filterType();
-    const search = searchText().toLowerCase();
+    const search = debouncedSearch().toLowerCase();
     const session = filterSession();
     const noise = hideLogging();
     const cancelled = hideCancelled();
@@ -186,6 +195,8 @@ const App: Component = () => {
     setFilterDirection('');
     setFilterType('');
     setSearchText('');
+    setDebouncedSearch('');
+    clearTimeout(searchDebounceTimer);
     setFilterSession('');
     setHideLogging(true);
     setHideCancelled(false);
@@ -502,7 +513,7 @@ const App: Component = () => {
               class="filter-search"
               placeholder="Search (press / to focus)..."
               value={searchText()}
-              onInput={(e) => setSearchText(e.currentTarget.value)}
+            onInput={(e) => handleSearchInput(e.currentTarget.value)}
             />
             <select
               class="filter-select"
