@@ -515,12 +515,13 @@
 
 /* Highlight flash animation */
 @keyframes highlight-flash {
-  0% { box-shadow: 0 0 0 3px var(--accent-border); }
+  0% { box-shadow: 0 0 0 3px var(--accent); }
+  40% { box-shadow: 0 0 0 3px var(--accent); }
   100% { box-shadow: none; }
 }
 
-.highlight-flash {
-  animation: highlight-flash 1.2s ease-out;
+.highlight-flash > .trace-entry {
+  animation: highlight-flash 1.5s ease-out;
 }
 
 /* Direction-specific left border accents */

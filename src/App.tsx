@@ -189,11 +189,15 @@ const App: Component = () => {
   }
 
   function scrollToEntry(id: number) {
+    // Expand the target entry
+    if (!expandedIds().has(id)) {
+      toggle(id);
+    }
     const el = entryRefs[id];
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       el.classList.add('highlight-flash');
-      setTimeout(() => el.classList.remove('highlight-flash'), 1200);
+      setTimeout(() => el.classList.remove('highlight-flash'), 1500);
     }
   }
 
