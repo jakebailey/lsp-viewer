@@ -23,6 +23,24 @@ function CopyButton(props: { text: string }) {
 }
 
 const FILE_METHODS = new Set(['textDocument/didOpen', 'textDocument/didChange', 'textDocument/didClose']);
+const LOG_MESSAGE_METHODS = new Set(['window/logMessage', 'window/showMessage']);
+
+const MESSAGE_TYPE_LABELS: Record<number, string> = {
+  1: 'ERROR',
+  2: 'WARN',
+  3: 'INFO',
+  4: 'LOG',
+};
+
+function getLogMessage(entry: TraceEntry): { level: string; levelClass: string; message: string; firstLine: string } | null {
+  if (!LOG_MESSAGE_METHODS.has(entry.method) || !entry.body || typeof entry.body !== 'object') return null;
+  const b = entry.body as { type?: number; message?: string };
+  const level = MESSAGE_TYPE_LABELS[b.type ?? 0] ?? `TYPE ${b.type}`;
+  const levelClass = b.type === 1 ? 'log-error' : b.type === 2 ? 'log-warn' : 'log-info';
+  const message = b.message ?? '';
+  const firstLine = message.split('\n')[0];
+  return { level, levelClass, message, firstLine };
+}
 
 const TraceEntryRow: Component<{
   entry: TraceEntry;
@@ -98,6 +116,16 @@ const TraceEntryRow: Component<{
         <span class={`trace-type-badge ${typeClass()} ${isError() ? 'type-error' : ''}`}>{isError() ? 'ERR' : typeBadge()}</span>
         <span class="trace-id" title={props.entry.requestId !== undefined ? `#${props.entry.requestId}` : ''}>{props.entry.requestId !== undefined ? `#${props.entry.requestId}` : ''}</span>
         <span class="trace-method">{props.entry.method}</span>
+        {(() => {
+          const log = getLogMessage(props.entry);
+          if (!log) return null;
+          return (
+            <>
+              <span class={`trace-log-level ${log.levelClass}`}>{log.level}</span>
+              <span class="trace-log-message" title={log.message}>{log.firstLine}</span>
+            </>
+          );
+        })()}
         <Show when={props.isCancelled}>
           <span class="trace-cancelled-badge">CANCELLED</span>
         </Show>
@@ -174,19 +202,37 @@ const TraceEntryRow: Component<{
       </div>
       <Show when={props.isExpanded}>
         <div class="trace-body">
-          <div class="trace-body-header">
-            <div class="trace-body-label">{props.entry.bodyLabel}:</div>
-            <Show when={formatBody()}>
-              <CopyButton text={formatBody()} />
-            </Show>
-          </div>
-          <Show when={props.entry.body !== undefined} fallback={<div class="trace-body-empty">No content</div>}>
-            <Show when={highlightedBody()} fallback={
-              <pre class="trace-body-content"><code>{formatBody()}</code></pre>
-            }>
-              <div class="trace-body-highlighted" innerHTML={highlightedBody()} />
-            </Show>
-          </Show>
+          {(() => {
+            const log = getLogMessage(props.entry);
+            if (log) {
+              return (
+                <>
+                  <div class="trace-body-header">
+                    <div class="trace-body-label">{log.level}:</div>
+                    <CopyButton text={log.message} />
+                  </div>
+                  <pre class="trace-body-content"><code>{log.message}</code></pre>
+                </>
+              );
+            }
+            return (
+              <>
+                <div class="trace-body-header">
+                  <div class="trace-body-label">{props.entry.bodyLabel}:</div>
+                  <Show when={formatBody()}>
+                    <CopyButton text={formatBody()} />
+                  </Show>
+                </div>
+                <Show when={props.entry.body !== undefined} fallback={<div class="trace-body-empty">No content</div>}>
+                  <Show when={highlightedBody()} fallback={
+                    <pre class="trace-body-content"><code>{formatBody()}</code></pre>
+                  }>
+                    <div class="trace-body-highlighted" innerHTML={highlightedBody()} />
+                  </Show>
+                </Show>
+              </>
+            );
+          })()}
           <Show when={props.files && FILE_METHODS.has(props.entry.method)}>
             <TraceFileContent
               entry={props.entry}

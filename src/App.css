@@ -296,10 +296,10 @@
   font-size: 13px;
   font-weight: 500;
   color: var(--text-h);
-  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .trace-id {
@@ -583,6 +583,41 @@
 /* Error responses */
 .trace-entry.error-response {
   border-left-color: var(--error-color) !important;
+}
+
+.trace-log-level {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.trace-log-level.log-error {
+  background: rgba(220, 38, 38, 0.15);
+  color: var(--error-color);
+}
+
+.trace-log-level.log-warn {
+  background: rgba(229, 165, 10, 0.15);
+  color: var(--warning-color);
+}
+
+.trace-log-level.log-info {
+  background: rgba(65, 173, 255, 0.1);
+  color: var(--sent-color);
+}
+
+.trace-log-message {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
 }
 
 .trace-type-badge.type-error {
