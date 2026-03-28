@@ -307,6 +307,11 @@
   font-size: 11px;
   color: var(--text-muted);
   flex-shrink: 0;
+  width: 48px;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .trace-latency {

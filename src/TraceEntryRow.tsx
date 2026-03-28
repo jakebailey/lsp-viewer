@@ -71,10 +71,8 @@ const TraceEntryRow: Component<{
         <span class="trace-time">{timeOnly()}</span>
         <span class={`trace-dir ${dirClass()}`}>{dirArrow()} {dirLabel()}</span>
         <span class={`trace-type-badge ${typeClass()}`}>{typeBadge()}</span>
+        <span class="trace-id">{props.entry.requestId !== undefined ? `#${props.entry.requestId}` : ''}</span>
         <span class="trace-method">{props.entry.method}</span>
-        <Show when={props.entry.requestId !== undefined}>
-          <span class="trace-id">#{props.entry.requestId}</span>
-        </Show>
         <Show when={props.entry.latencyRaw}>
           <span class="trace-latency">{props.entry.latencyRaw}</span>
         </Show>
