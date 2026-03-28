@@ -1,5 +1,7 @@
 import type { TraceEntry } from './parser';
 
+export type PositionEncoding = 'utf-8' | 'utf-16' | 'utf-32';
+
 export interface FileSnapshot {
   uri: string;
   languageId: string;
@@ -50,7 +52,48 @@ interface DidCloseParams {
   };
 }
 
-function applyChange(text: string, change: TextDocumentContentChangeEvent): string {
+/**
+ * Convert a character offset in the given encoding to a JS string index (UTF-16 code units).
+ * 
+ * - utf-16: character is already a UTF-16 code unit offset (JS native), use directly
+ * - utf-32: character counts Unicode code points; iterate code points to find the JS index
+ * - utf-8: character counts UTF-8 bytes; encode each code point to count bytes
+ */
+function charOffsetToStringIndex(line: string, character: number, encoding: PositionEncoding): number {
+  if (encoding === 'utf-16') {
+    // JS strings are UTF-16, so character offset maps directly to string index
+    return Math.min(character, line.length);
+  }
+
+  if (encoding === 'utf-32') {
+    // Count Unicode code points
+    let jsIndex = 0;
+    let cpCount = 0;
+    while (jsIndex < line.length && cpCount < character) {
+      const cp = line.codePointAt(jsIndex)!;
+      jsIndex += cp > 0xFFFF ? 2 : 1; // Surrogate pair takes 2 UTF-16 code units
+      cpCount++;
+    }
+    return jsIndex;
+  }
+
+  // utf-8: count UTF-8 bytes
+  let jsIndex = 0;
+  let byteCount = 0;
+  while (jsIndex < line.length && byteCount < character) {
+    const cp = line.codePointAt(jsIndex)!;
+    // Calculate UTF-8 byte length of this code point
+    if (cp <= 0x7F) byteCount += 1;
+    else if (cp <= 0x7FF) byteCount += 2;
+    else if (cp <= 0xFFFF) byteCount += 3;
+    else byteCount += 4;
+
+    jsIndex += cp > 0xFFFF ? 2 : 1;
+  }
+  return jsIndex;
+}
+
+function applyChange(text: string, change: TextDocumentContentChangeEvent, encoding: PositionEncoding): string {
   // Full replacement (no range specified)
   if (!change.range) {
     return change.text;
@@ -64,19 +107,35 @@ function applyChange(text: string, change: TextDocumentContentChangeEvent): stri
   for (let i = 0; i < start.line && i < lines.length; i++) {
     startOffset += lines[i].length + 1; // +1 for \n
   }
-  startOffset += Math.min(start.character, (lines[start.line] ?? '').length);
+  const startLine = lines[start.line] ?? '';
+  startOffset += charOffsetToStringIndex(startLine, start.character, encoding);
 
   let endOffset = 0;
   for (let i = 0; i < end.line && i < lines.length; i++) {
     endOffset += lines[i].length + 1;
   }
-  endOffset += Math.min(end.character, (lines[end.line] ?? '').length);
+  const endLine = lines[end.line] ?? '';
+  endOffset += charOffsetToStringIndex(endLine, end.character, encoding);
 
   return text.slice(0, startOffset) + change.text + text.slice(endOffset);
 }
 
 export function trackFiles(entries: TraceEntry[]): Map<string, TrackedFile> {
   const files = new Map<string, TrackedFile>();
+
+  // Detect position encoding from initialize response.
+  // Default is utf-16 per the LSP spec.
+  let encoding: PositionEncoding = 'utf-16';
+  for (const entry of entries) {
+    if (entry.method === 'initialize' && entry.messageType === 'response' && entry.direction === 'received') {
+      const result = entry.body as { capabilities?: { positionEncoding?: string } } | null;
+      const enc = result?.capabilities?.positionEncoding;
+      if (enc === 'utf-8' || enc === 'utf-16' || enc === 'utf-32') {
+        encoding = enc;
+      }
+      break; // Use the first initialize response
+    }
+  }
 
   for (const entry of entries) {
     if (entry.direction !== 'sent') continue;
@@ -124,7 +183,7 @@ export function trackFiles(entries: TraceEntry[]): Map<string, TrackedFile> {
 
       // Apply changes in order
       for (const change of params.contentChanges) {
-        text = applyChange(text, change);
+        text = applyChange(text, change, encoding);
       }
 
       tracked.snapshots.push({
