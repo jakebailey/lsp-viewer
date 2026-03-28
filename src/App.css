@@ -303,11 +303,14 @@
 }
 
 .trace-id {
+  display: inline-block;
   font-family: var(--mono);
   font-size: 11px;
   color: var(--text-muted);
-  flex-shrink: 0;
+  flex: 0 0 48px;
   width: 48px;
+  min-width: 48px;
+  max-width: 48px;
   text-align: right;
   overflow: hidden;
   text-overflow: ellipsis;
