@@ -232,16 +232,6 @@ const HoverSnippet: Component<{
     }
   });
 
-  const shortUri = () => {
-    const u = fileUri();
-    try {
-      const path = new URL(u).pathname;
-      return path;
-    } catch {
-      return u;
-    }
-  };
-
   return (
     <Show when={html()}>
       <div class="hover-snippet">
