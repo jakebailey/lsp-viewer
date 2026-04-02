@@ -6,6 +6,7 @@ import { getHighlighter, type Highlighter } from './highlighter';
 import { formatJson } from './formatJson';
 import TraceFileContent from './TraceFileContent';
 import HoverContent, { extractHoverContents } from './HoverContent';
+import HoverSnippet from './HoverSnippet';
 
 function CopyButton(props: { text: string }) {
   const [copied, setCopied] = createSignal(false);
@@ -224,6 +225,15 @@ const TraceEntryRow: Component<{
                     <CopyButton text={formatBody()} />
                   </Show>
                 </div>
+                <Show when={props.entry.method === 'textDocument/hover' && props.entry.bodyLabel === 'Result' && props.pairedEntry && props.files}>
+                  <HoverSnippet
+                    requestBody={props.pairedEntry!.body}
+                    responseBody={props.entry.body}
+                    requestEntryId={props.pairedEntry!.id}
+                    files={props.files!}
+                    isDark={props.isDark ?? true}
+                  />
+                </Show>
                 <Show when={props.entry.method === 'textDocument/hover' && props.entry.bodyLabel === 'Result' && extractHoverContents(props.entry.body)}>
                   {(contents) => (
                     <HoverContent contents={contents()} isDark={props.isDark ?? true} />
