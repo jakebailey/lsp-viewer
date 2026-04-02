@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "marked": "^17.0.5",
     "shiki": "^4.0.2",
     "solid-js": "^1.9.11"
   },

@@ -411,6 +411,75 @@
   font-style: italic;
 }
 
+/* Rendered hover content */
+.hover-content {
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.hover-segment {
+  margin: 0;
+}
+
+.hover-segment + .hover-segment {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.hover-content p {
+  margin: 4px 0;
+}
+
+.hover-content p:first-child {
+  margin-top: 0;
+}
+
+.hover-content p:last-child {
+  margin-bottom: 0;
+}
+
+.hover-content code {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--code-bg);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.hover-content pre {
+  margin: 4px 0;
+  padding: 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+  tab-size: 2;
+  border-radius: var(--radius);
+  overflow-x: auto;
+}
+
+.hover-content pre code {
+  background: none;
+  padding: 0;
+}
+
+.hover-content hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 6px 0;
+}
+
+.hover-code-fallback {
+  background: var(--code-bg);
+  overflow-x: auto;
+}
+
 /* Inline file content in trace entries */
 .trace-file-content {
   border-top: 1px solid var(--border);
